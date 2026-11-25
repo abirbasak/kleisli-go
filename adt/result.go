@@ -71,8 +71,8 @@ func FromNonZero[T comparable](val T, err error) Result[T] {
 // wireResult is Result[T]'s JSON wire shape — Rust serde's externally tagged
 // representation: {"ok": T} / {"err": E}. Exactly one key is ever present.
 type wireResult[T any] struct {
-	Ok  *T      `json:"ok,omitempty"`
-	Err *string `json:"err,omitempty"`
+	Ok  *T      `json:"ok,omitzero"`
+	Err *string `json:"err,omitzero"`
 }
 
 // MarshalJSON writes the Result as {"ok":<val>} or {"err":"<message>"}.

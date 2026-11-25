@@ -884,6 +884,73 @@ func TestResult_JSON_roundtrip_Err(t *testing.T) {
 	}
 }
 
+func assertResultJSON[T any](t *testing.T, r adt.Result[T], want string) adt.Result[T] {
+	t.Helper()
+	data, err := fn.ToJSON(r).Unwrap()
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(data) != want {
+		t.Fatalf("wire format: got %s, want %s", data, want)
+	}
+	r2, err := fn.FromJSON[adt.Result[T]](data).Unwrap()
+	if err != nil {
+		t.Fatalf("Unmarshal %s: %v", data, err)
+	}
+	if !r2.IsOK() {
+		t.Fatalf("roundtrip %s: want OK, got %v", data, r2)
+	}
+	return r2
+}
+
+func TestResult_JSON_roundtrip_OK_empty_values(t *testing.T) {
+	t.Run("empty string", func(t *testing.T) {
+		if got := assertResultJSON(t, adt.OK(""), `{"ok":""}`).MustGet(); got != "" {
+			t.Fatalf(`want "", got %q`, got)
+		}
+	})
+	t.Run("empty slice", func(t *testing.T) {
+		if got := assertResultJSON(t, adt.OK([]int{}), `{"ok":[]}`).MustGet(); got == nil || len(got) != 0 {
+			t.Fatalf("want empty non-nil slice, got %#v", got)
+		}
+	})
+	t.Run("empty map", func(t *testing.T) {
+		if got := assertResultJSON(t, adt.OK(map[string]int{}), `{"ok":{}}`).MustGet(); got == nil || len(got) != 0 {
+			t.Fatalf("want empty non-nil map, got %#v", got)
+		}
+	})
+	t.Run("empty struct", func(t *testing.T) {
+		assertResultJSON(t, adt.OK(struct{}{}), `{"ok":{}}`)
+	})
+	t.Run("nil pointer", func(t *testing.T) {
+		if got := assertResultJSON(t, adt.OK[*int](nil), `{"ok":null}`).MustGet(); got != nil {
+			t.Fatalf("want nil pointer, got %v", got)
+		}
+	})
+	t.Run("zero int", func(t *testing.T) {
+		if got := assertResultJSON(t, adt.OK(0), `{"ok":0}`).MustGet(); got != 0 {
+			t.Fatalf("want 0, got %d", got)
+		}
+	})
+}
+
+func TestResult_JSON_roundtrip_Err_empty_message(t *testing.T) {
+	data, err := fn.ToJSON(adt.Err[int](errors.New(""))).Unwrap()
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(data) != `{"err":""}` {
+		t.Fatalf(`wire format: got %s, want {"err":""}`, data)
+	}
+	r2, err := fn.FromJSON[adt.Result[int]](data).Unwrap()
+	if err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !r2.IsErr() || r2.MustErr().Error() != "" {
+		t.Fatalf("roundtrip: want Err with empty message, got %v", r2)
+	}
+}
+
 func TestResult_UnmarshalJSON_missing_keys(t *testing.T) {
 	if fn.FromJSON[adt.Result[int]]([]byte(`{}`)).IsOK() {
 		t.Fatal(`Unmarshal of {} (neither "ok" nor "err") should error`)
