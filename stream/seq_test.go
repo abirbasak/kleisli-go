@@ -517,3 +517,82 @@ func TestSeq_MinByCompare_TiesKeepFirst(t *testing.T) {
 		t.Errorf("MinByCompare() tie = %v, want Some(a) (first element must win)", got)
 	}
 }
+
+func TestSeq_Count(t *testing.T) {
+	if got := SeqOf(1, 2, 3, 4).Filter(func(n int) bool { return n > 1 }).Count(); got != 3 {
+		t.Errorf("Count() = %d, want 3", got)
+	}
+	if got := EmptySeq[int]().Count(); got != 0 {
+		t.Errorf("EmptySeq().Count() = %d, want 0", got)
+	}
+}
+
+func TestSeq_Last(t *testing.T) {
+	got := SeqOf(1, 2, 3, 2, 1).Map(func(n int) int { return n * 10 }).Last(func(n int) bool { return n == 20 })
+	if got.IsNone() || got.MustGet() != 20 {
+		t.Errorf("Last() = %v, want Some(20)", got)
+	}
+	idx := EnumerateSeq(SeqOf("a", "b", "a")).Last(func(p adt.Indexed[string]) bool { return p.Value == "a" })
+	if idx.IsNone() || idx.MustGet().Index != 2 {
+		t.Errorf("Last() = %v, want the match at index 2", idx)
+	}
+	if SeqOf(1, 2, 3).Last(func(n int) bool { return n == 99 }).IsSome() {
+		t.Error("Last() found a match that doesn't exist")
+	}
+}
+
+func TestSeq_GroupBy(t *testing.T) {
+	got := SeqOf(1, 2, 3, 4, 5, 6).GroupBy(func(n int) string {
+		if n%2 == 0 {
+			return "even"
+		}
+		return "odd"
+	})
+	want := map[string][]int{"odd": {1, 3, 5}, "even": {2, 4, 6}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupBy() = %v, want %v", got, want)
+	}
+}
+
+func TestSeq_Partition(t *testing.T) {
+	even, odd := SeqOf(1, 2, 3, 4, 5, 6).Partition(func(n int) bool { return n%2 == 0 })
+	if want := []int{2, 4, 6}; !reflect.DeepEqual(even, want) {
+		t.Errorf("Partition() matched = %v, want %v", even, want)
+	}
+	if want := []int{1, 3, 5}; !reflect.DeepEqual(odd, want) {
+		t.Errorf("Partition() unmatched = %v, want %v", odd, want)
+	}
+}
+
+func TestSeq_Nth(t *testing.T) {
+	if got := SeqOf("a", "b", "c", "d").Nth(2); got.IsNone() || got.MustGet() != "c" {
+		t.Errorf("Nth(2) = %v, want Some(c)", got)
+	}
+	if got := SeqOf("a", "b").Nth(0); got.IsNone() || got.MustGet() != "a" {
+		t.Errorf("Nth(0) = %v, want Some(a)", got)
+	}
+	if SeqOf(1, 2).Nth(5).IsSome() {
+		t.Error("Nth past the end should be None")
+	}
+	if SeqOf(1, 2).Nth(-1).IsSome() {
+		t.Error("Nth(-1) should be None")
+	}
+}
+
+func TestSeq_Nth_StopsAfterNthElement(t *testing.T) {
+	pulled := 0
+	naturals := FromSeq(func(yield func(int) bool) {
+		for i := 0; ; i++ {
+			pulled++
+			if !yield(i) {
+				return
+			}
+		}
+	})
+	if got := naturals.Nth(3); got.IsNone() || got.MustGet() != 3 {
+		t.Fatalf("Nth(3) = %v, want Some(3)", got)
+	}
+	if pulled != 4 {
+		t.Errorf("Nth(3) pulled %d elements, want 4", pulled)
+	}
+}

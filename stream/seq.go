@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/azuiktech/kleisli-go/adt"
+	"github.com/azuiktech/kleisli-go/fn"
 )
 
 // Seq wraps an iter.Seq[T] — Stream's lazy, pull-based counterpart, safe
@@ -377,6 +378,43 @@ func (s Seq[T]) ToMapBy[K comparable, V any](fn func(T) (K, V), merge func(exist
 		}
 	}
 	return out
+}
+
+// Count consumes s and returns the number of elements.
+func (s Seq[T]) Count() int {
+	return s.Reduce(0, func(n int, _ T) int { return n + 1 })
+}
+
+// Last consumes s and returns the last element matching fn, or None.
+func (s Seq[T]) Last(fn func(T) bool) adt.Option[T] {
+	return s.Reduce(adt.None[T](), func(found adt.Option[T], v T) adt.Option[T] {
+		return adt.Some(v).Filter(fn).Or(found)
+	})
+}
+
+// Nth returns the element at 0-based index n, or None when n is negative
+// or past the end. It stops reading s after that element.
+func (s Seq[T]) Nth(n int) adt.Option[T] {
+	return adt.Some(n).Filter(fn.GreaterThanOrEqual(0)).FlatMap(func(n int) adt.Option[T] {
+		return s.Skip(n).First(fn.True[T])
+	})
+}
+
+// GroupBy consumes s and buckets its elements by fn's key, preserving
+// order within each bucket.
+func (s Seq[T]) GroupBy[K comparable](fn func(T) K) map[K][]T {
+	return s.Reduce(map[K][]T{}, func(groups map[K][]T, v T) map[K][]T {
+		k := fn(v)
+		groups[k] = append(groups[k], v)
+		return groups
+	})
+}
+
+// Partition consumes s and splits it into the elements matching fn and
+// the rest, preserving order in both.
+func (s Seq[T]) Partition(fn func(T) bool) (matched, unmatched []T) {
+	groups := s.GroupBy(fn)
+	return groups[true], groups[false]
 }
 
 // ZipSeq pairs elements from two Seqs positionally, stopping at the
