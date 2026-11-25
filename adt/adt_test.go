@@ -1,11 +1,11 @@
 package adt_test
 
 import (
-	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/azuiktech/kleisli-go/adt"
+	"github.com/azuiktech/kleisli-go/fn"
 )
 
 var errBoom = errors.New("boom")
@@ -845,15 +845,15 @@ func TestAs_wrong_type_is_none(t *testing.T) {
 
 func TestResult_JSON_roundtrip_OK(t *testing.T) {
 	r := adt.OK(42)
-	data, err := json.Marshal(r)
+	data, err := fn.ToJSON(r).Unwrap()
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 	if string(data) != `{"ok":42}` {
 		t.Fatalf(`wire format: got %s, want {"ok":42}`, data)
 	}
-	var r2 adt.Result[int]
-	if err := json.Unmarshal(data, &r2); err != nil {
+	r2, err := fn.FromJSON[adt.Result[int]](data).Unwrap()
+	if err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if !r2.IsOK() || r2.MustGet() != 42 {
@@ -863,15 +863,15 @@ func TestResult_JSON_roundtrip_OK(t *testing.T) {
 
 func TestResult_JSON_roundtrip_Err(t *testing.T) {
 	r := adt.Err[int](errBoom)
-	data, err := json.Marshal(r)
+	data, err := fn.ToJSON(r).Unwrap()
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 	if string(data) != `{"err":"boom"}` {
 		t.Fatalf(`wire format: got %s, want {"err":"boom"}`, data)
 	}
-	var r2 adt.Result[int]
-	if err := json.Unmarshal(data, &r2); err != nil {
+	r2, err := fn.FromJSON[adt.Result[int]](data).Unwrap()
+	if err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if !r2.IsErr() || r2.MustErr().Error() != "boom" {
@@ -885,8 +885,7 @@ func TestResult_JSON_roundtrip_Err(t *testing.T) {
 }
 
 func TestResult_UnmarshalJSON_missing_keys(t *testing.T) {
-	var r adt.Result[int]
-	if err := json.Unmarshal([]byte(`{}`), &r); err == nil {
+	if fn.FromJSON[adt.Result[int]]([]byte(`{}`)).IsOK() {
 		t.Fatal(`Unmarshal of {} (neither "ok" nor "err") should error`)
 	}
 }
@@ -895,15 +894,15 @@ func TestResult_UnmarshalJSON_missing_keys(t *testing.T) {
 
 func TestOption_JSON_roundtrip_Some(t *testing.T) {
 	o := adt.Some(7)
-	data, err := json.Marshal(o)
+	data, err := fn.ToJSON(o).Unwrap()
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 	if string(data) != "7" {
 		t.Fatalf("wire format: got %s, want 7", data)
 	}
-	var o2 adt.Option[int]
-	if err := json.Unmarshal(data, &o2); err != nil {
+	o2, err := fn.FromJSON[adt.Option[int]](data).Unwrap()
+	if err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if !o2.IsSome() || o2.MustGet() != 7 {
@@ -913,15 +912,15 @@ func TestOption_JSON_roundtrip_Some(t *testing.T) {
 
 func TestOption_JSON_roundtrip_None(t *testing.T) {
 	o := adt.None[int]()
-	data, err := json.Marshal(o)
+	data, err := fn.ToJSON(o).Unwrap()
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 	if string(data) != "null" {
 		t.Fatalf("wire format: got %s, want null", data)
 	}
-	var o2 adt.Option[int]
-	if err := json.Unmarshal(data, &o2); err != nil {
+	o2, err := fn.FromJSON[adt.Option[int]](data).Unwrap()
+	if err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if !o2.IsNone() {
@@ -940,8 +939,7 @@ func (m *nilableMap) UnmarshalJSON(data []byte) error {
 }
 
 func TestOption_UnmarshalJSON_nonNull_nil_value_errors(t *testing.T) {
-	var o adt.Option[nilableMap]
-	if err := json.Unmarshal([]byte(`{"a":1}`), &o); err == nil {
+	if fn.FromJSON[adt.Option[nilableMap]]([]byte(`{"a":1}`)).IsOK() {
 		t.Fatal("Option.UnmarshalJSON should error when non-null JSON decodes to a nil value")
 	}
 }

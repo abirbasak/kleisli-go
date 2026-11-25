@@ -1,6 +1,6 @@
 package adt
 
-import "encoding/json"
+import json "encoding/json/v2"
 
 // Pair represents an ordered Cartesian product of two values of types A and B.
 type Pair[A, B any] struct {
