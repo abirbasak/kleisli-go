@@ -58,6 +58,47 @@ func SeqOfMap[K comparable, V any](m map[K]V) Seq[adt.Pair[K, V]] {
 	})
 }
 
+// Iterate yields seed, next(seed), next(next(seed)), … without end.
+// next runs only when the following element is pulled.
+func Iterate[T any](seed T, next func(T) T) Seq[T] {
+	return FromSeq(func(yield func(T) bool) {
+		for v := seed; yield(v); v = next(v) {
+		}
+	})
+}
+
+// Generate yields fn() for every element pulled, without end.
+func Generate[T any](fn func() T) Seq[T] {
+	return FromSeq(func(yield func(T) bool) {
+		for yield(fn()) {
+		}
+	})
+}
+
+// Repeat yields v without end.
+func Repeat[T any](v T) Seq[T] {
+	return Iterate(v, fn.Identity[T])
+}
+
+// Range yields start, start+1, … up to but not including end. It is
+// empty when end <= start.
+func Range[N Number](start, end N) Seq[N] {
+	return Iterate(start, func(n N) N { return n + 1 }).TakeWhile(fn.LessThan(end))
+}
+
+// Unfold yields elements by repeatedly applying step to a state: each
+// Some(pair) emits pair.First() and continues from pair.Second(); the
+// first None ends the Seq.
+func Unfold[S, T any](seed S, step func(S) adt.Option[adt.Pair[T, S]]) Seq[T] {
+	next := func(o adt.Option[adt.Pair[T, S]]) adt.Option[adt.Pair[T, S]] {
+		return o.FlatMap(func(p adt.Pair[T, S]) adt.Option[adt.Pair[T, S]] { return step(p.Second()) })
+	}
+	first := func(o adt.Option[adt.Pair[T, S]]) adt.Option[T] { return o.Map(adt.Pair[T, S].First) }
+	return FromSeq(func(yield func(T) bool) {
+		Iterate(step(seed), next).MapWhile(first).All()(yield)
+	})
+}
+
 // filterSeq is Filter's shared engine.
 func filterSeq[T any](seq iter.Seq[T], fn func(T) bool) iter.Seq[T] {
 	return func(yield func(T) bool) {

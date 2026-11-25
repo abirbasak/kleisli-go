@@ -3,6 +3,7 @@ package stream
 import (
 	"reflect"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/azuiktech/kleisli-go/adt"
@@ -594,5 +595,89 @@ func TestSeq_Nth_StopsAfterNthElement(t *testing.T) {
 	}
 	if pulled != 4 {
 		t.Errorf("Nth(3) pulled %d elements, want 4", pulled)
+	}
+}
+
+func TestRange(t *testing.T) {
+	if got, want := Range(0, 5).Collect(), []int{0, 1, 2, 3, 4}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Range(0, 5) = %v, want %v", got, want)
+	}
+	if got := Range(5, 5).Collect(); len(got) != 0 {
+		t.Errorf("Range(5, 5) = %v, want empty", got)
+	}
+	if got := Range(5, 2).Collect(); len(got) != 0 {
+		t.Errorf("Range(5, 2) = %v, want empty", got)
+	}
+	if got, want := Range(0.0, 2.5).Collect(), []float64{0, 1, 2}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Range(0.0, 2.5) = %v, want %v", got, want)
+	}
+	if got, want := Range[uint8](253, 255).Collect(), []uint8{253, 254}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Range[uint8](253, 255) = %v, want %v", got, want)
+	}
+}
+
+func TestRepeat(t *testing.T) {
+	if got, want := Repeat("x").Take(3).Collect(), []string{"x", "x", "x"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Repeat(x).Take(3) = %v, want %v", got, want)
+	}
+}
+
+func TestIterate(t *testing.T) {
+	calls := 0
+	got := Iterate(1, func(n int) int { calls++; return n * 2 }).Take(5).Collect()
+	if want := []int{1, 2, 4, 8, 16}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Iterate(1, *2).Take(5) = %v, want %v", got, want)
+	}
+	if calls != 4 {
+		t.Errorf("Iterate called next %d times for 5 elements, want 4", calls)
+	}
+}
+
+func TestGenerate(t *testing.T) {
+	calls := 0
+	got := Generate(func() int { calls++; return calls }).Take(3).Collect()
+	if want := []int{1, 2, 3}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Generate().Take(3) = %v, want %v", got, want)
+	}
+	if calls != 3 {
+		t.Errorf("Generate called fn %d times for 3 elements, want 3", calls)
+	}
+}
+
+func TestUnfold_Infinite(t *testing.T) {
+	fib := Unfold(adt.PairOf(0, 1), func(p adt.Pair[int, int]) adt.Option[adt.Pair[int, adt.Pair[int, int]]] {
+		a, b := p.Unpack()
+		return adt.Some(adt.PairOf(a, adt.PairOf(b, a+b)))
+	})
+	if got, want := fib.Take(7).Collect(), []int{0, 1, 1, 2, 3, 5, 8}; !reflect.DeepEqual(got, want) {
+		t.Errorf("fib.Take(7) = %v, want %v", got, want)
+	}
+}
+
+func TestUnfold_EndsOnNone(t *testing.T) {
+	calls := 0
+	countdown := Unfold(3, func(n int) adt.Option[adt.Pair[string, int]] {
+		calls++
+		if n == 0 {
+			return adt.None[adt.Pair[string, int]]()
+		}
+		return adt.Some(adt.PairOf(strconv.Itoa(n), n-1))
+	})
+	if got, want := countdown.Collect(), []string{"3", "2", "1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("countdown = %v, want %v", got, want)
+	}
+	if calls != 4 {
+		t.Errorf("Unfold called step %d times, want 4", calls)
+	}
+}
+
+func TestUnfold_IsLazy(t *testing.T) {
+	calls := 0
+	Unfold(0, func(n int) adt.Option[adt.Pair[int, int]] {
+		calls++
+		return adt.Some(adt.PairOf(n, n+1))
+	})
+	if calls != 0 {
+		t.Errorf("Unfold called step %d times before iteration, want 0", calls)
 	}
 }
