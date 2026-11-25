@@ -361,6 +361,18 @@ func (p Pipe[T]) Collect() []T {
 	return out
 }
 
+// All returns p as an iterator over its items in arrival order. Breaking
+// out early leaves the producer blocked until p's context is cancelled.
+func (p Pipe[T]) All() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for item := range p.ch {
+			if !yield(item) {
+				return
+			}
+		}
+	}
+}
+
 // Reduce folds every item into an accumulator of type U, draining p
 // fully — the same shape as stream.Stream's own Reduce.
 func (p Pipe[T]) Reduce[U any](initial U, fn func(U, T) U) U {

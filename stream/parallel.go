@@ -7,7 +7,11 @@
 // with bounded concurrency, nothing more.
 package stream
 
-import "github.com/azuiktech/kleisli-go/async"
+import (
+	"context"
+
+	"github.com/azuiktech/kleisli-go/async"
+)
 
 // ToPipe hands s's items to async.Pipe — the explicit boundary between
 // stream's synchronous world and async's CSP one. Everything async
@@ -42,5 +46,16 @@ func (s Stream[T]) Region[U any](fn func(async.Pipe[T]) async.Pipe[U]) Stream[U]
 func (s Stream[T]) Parallel[U any](n int, fn func(T) U) Stream[U] {
 	return s.Region(func(p async.Pipe[T]) async.Pipe[U] {
 		return p.Parallel(n, fn)
+	})
+}
+
+// Parallel applies fn to s's elements on n worker goroutines, lazily:
+// nothing runs until the result is iterated. Output order is completion
+// order. Stopping early cancels the workers. Panics if n < 1.
+func (s Seq[T]) Parallel[U any](n int, fn func(T) U) Seq[U] {
+	return FromSeq(func(yield func(U) bool) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		async.FromIterContext(ctx, s.seq).Parallel(n, fn).All()(yield)
 	})
 }

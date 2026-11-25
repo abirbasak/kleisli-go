@@ -371,3 +371,26 @@ func TestOrderedN_StopsWhenBufferExceeded(t *testing.T) {
 		t.Errorf("OrderedN with exceeded buffer should produce no output, got %v", got)
 	}
 }
+
+func TestPipe_All_YieldsEveryItemInOrder(t *testing.T) {
+	var got []int
+	for v := range From([]int{1, 2, 3}).All() {
+		got = append(got, v)
+	}
+	if want := []int{1, 2, 3}; !reflect.DeepEqual(got, want) {
+		t.Errorf("All() = %v, want %v", got, want)
+	}
+}
+
+func TestPipe_All_StopsWhenConsumerBreaks(t *testing.T) {
+	var got []int
+	for v := range From([]int{1, 2, 3}).All() {
+		got = append(got, v)
+		if v == 2 {
+			break
+		}
+	}
+	if want := []int{1, 2}; !reflect.DeepEqual(got, want) {
+		t.Errorf("All() with break = %v, want %v", got, want)
+	}
+}

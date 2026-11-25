@@ -3,6 +3,7 @@ package stream
 import (
 	"reflect"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/azuiktech/kleisli-go/adt"
@@ -515,5 +516,168 @@ func TestSeq_MinByCompare_TiesKeepFirst(t *testing.T) {
 	got := SeqOf(item{"a", 1}, item{"b", 1}, item{"c", 2}).MinByCompare(less)
 	if got.IsNone() || got.MustGet().Name != "a" {
 		t.Errorf("MinByCompare() tie = %v, want Some(a) (first element must win)", got)
+	}
+}
+
+func TestSeq_Count(t *testing.T) {
+	if got := SeqOf(1, 2, 3, 4).Filter(func(n int) bool { return n > 1 }).Count(); got != 3 {
+		t.Errorf("Count() = %d, want 3", got)
+	}
+	if got := EmptySeq[int]().Count(); got != 0 {
+		t.Errorf("EmptySeq().Count() = %d, want 0", got)
+	}
+}
+
+func TestSeq_Last(t *testing.T) {
+	got := SeqOf(1, 2, 3, 2, 1).Map(func(n int) int { return n * 10 }).Last(func(n int) bool { return n == 20 })
+	if got.IsNone() || got.MustGet() != 20 {
+		t.Errorf("Last() = %v, want Some(20)", got)
+	}
+	idx := EnumerateSeq(SeqOf("a", "b", "a")).Last(func(p adt.Indexed[string]) bool { return p.Value == "a" })
+	if idx.IsNone() || idx.MustGet().Index != 2 {
+		t.Errorf("Last() = %v, want the match at index 2", idx)
+	}
+	if SeqOf(1, 2, 3).Last(func(n int) bool { return n == 99 }).IsSome() {
+		t.Error("Last() found a match that doesn't exist")
+	}
+}
+
+func TestSeq_GroupBy(t *testing.T) {
+	got := SeqOf(1, 2, 3, 4, 5, 6).GroupBy(func(n int) string {
+		if n%2 == 0 {
+			return "even"
+		}
+		return "odd"
+	})
+	want := map[string][]int{"odd": {1, 3, 5}, "even": {2, 4, 6}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupBy() = %v, want %v", got, want)
+	}
+}
+
+func TestSeq_Partition(t *testing.T) {
+	even, odd := SeqOf(1, 2, 3, 4, 5, 6).Partition(func(n int) bool { return n%2 == 0 })
+	if want := []int{2, 4, 6}; !reflect.DeepEqual(even, want) {
+		t.Errorf("Partition() matched = %v, want %v", even, want)
+	}
+	if want := []int{1, 3, 5}; !reflect.DeepEqual(odd, want) {
+		t.Errorf("Partition() unmatched = %v, want %v", odd, want)
+	}
+}
+
+func TestSeq_Nth(t *testing.T) {
+	if got := SeqOf("a", "b", "c", "d").Nth(2); got.IsNone() || got.MustGet() != "c" {
+		t.Errorf("Nth(2) = %v, want Some(c)", got)
+	}
+	if got := SeqOf("a", "b").Nth(0); got.IsNone() || got.MustGet() != "a" {
+		t.Errorf("Nth(0) = %v, want Some(a)", got)
+	}
+	if SeqOf(1, 2).Nth(5).IsSome() {
+		t.Error("Nth past the end should be None")
+	}
+	if SeqOf(1, 2).Nth(-1).IsSome() {
+		t.Error("Nth(-1) should be None")
+	}
+}
+
+func TestSeq_Nth_StopsAfterNthElement(t *testing.T) {
+	pulled := 0
+	naturals := FromSeq(func(yield func(int) bool) {
+		for i := 0; ; i++ {
+			pulled++
+			if !yield(i) {
+				return
+			}
+		}
+	})
+	if got := naturals.Nth(3); got.IsNone() || got.MustGet() != 3 {
+		t.Fatalf("Nth(3) = %v, want Some(3)", got)
+	}
+	if pulled != 4 {
+		t.Errorf("Nth(3) pulled %d elements, want 4", pulled)
+	}
+}
+
+func TestRange(t *testing.T) {
+	if got, want := Range(0, 5).Collect(), []int{0, 1, 2, 3, 4}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Range(0, 5) = %v, want %v", got, want)
+	}
+	if got := Range(5, 5).Collect(); len(got) != 0 {
+		t.Errorf("Range(5, 5) = %v, want empty", got)
+	}
+	if got := Range(5, 2).Collect(); len(got) != 0 {
+		t.Errorf("Range(5, 2) = %v, want empty", got)
+	}
+	if got, want := Range(0.0, 2.5).Collect(), []float64{0, 1, 2}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Range(0.0, 2.5) = %v, want %v", got, want)
+	}
+	if got, want := Range[uint8](253, 255).Collect(), []uint8{253, 254}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Range[uint8](253, 255) = %v, want %v", got, want)
+	}
+}
+
+func TestRepeat(t *testing.T) {
+	if got, want := Repeat("x").Take(3).Collect(), []string{"x", "x", "x"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Repeat(x).Take(3) = %v, want %v", got, want)
+	}
+}
+
+func TestIterate(t *testing.T) {
+	calls := 0
+	got := Iterate(1, func(n int) int { calls++; return n * 2 }).Take(5).Collect()
+	if want := []int{1, 2, 4, 8, 16}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Iterate(1, *2).Take(5) = %v, want %v", got, want)
+	}
+	if calls != 4 {
+		t.Errorf("Iterate called next %d times for 5 elements, want 4", calls)
+	}
+}
+
+func TestGenerate(t *testing.T) {
+	calls := 0
+	got := Generate(func() int { calls++; return calls }).Take(3).Collect()
+	if want := []int{1, 2, 3}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Generate().Take(3) = %v, want %v", got, want)
+	}
+	if calls != 3 {
+		t.Errorf("Generate called fn %d times for 3 elements, want 3", calls)
+	}
+}
+
+func TestUnfold_Infinite(t *testing.T) {
+	fib := Unfold(adt.PairOf(0, 1), func(p adt.Pair[int, int]) adt.Option[adt.Pair[int, adt.Pair[int, int]]] {
+		a, b := p.Unpack()
+		return adt.Some(adt.PairOf(a, adt.PairOf(b, a+b)))
+	})
+	if got, want := fib.Take(7).Collect(), []int{0, 1, 1, 2, 3, 5, 8}; !reflect.DeepEqual(got, want) {
+		t.Errorf("fib.Take(7) = %v, want %v", got, want)
+	}
+}
+
+func TestUnfold_EndsOnNone(t *testing.T) {
+	calls := 0
+	countdown := Unfold(3, func(n int) adt.Option[adt.Pair[string, int]] {
+		calls++
+		if n == 0 {
+			return adt.None[adt.Pair[string, int]]()
+		}
+		return adt.Some(adt.PairOf(strconv.Itoa(n), n-1))
+	})
+	if got, want := countdown.Collect(), []string{"3", "2", "1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("countdown = %v, want %v", got, want)
+	}
+	if calls != 4 {
+		t.Errorf("Unfold called step %d times, want 4", calls)
+	}
+}
+
+func TestUnfold_IsLazy(t *testing.T) {
+	calls := 0
+	Unfold(0, func(n int) adt.Option[adt.Pair[int, int]] {
+		calls++
+		return adt.Some(adt.PairOf(n, n+1))
+	})
+	if calls != 0 {
+		t.Errorf("Unfold called step %d times before iteration, want 0", calls)
 	}
 }
