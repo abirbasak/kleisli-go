@@ -18,7 +18,8 @@
 package adt
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 )
@@ -87,7 +88,7 @@ func (r Result[T]) MarshalJSON() ([]byte, error) {
 // error is a plain errors.New(message) — the original error's identity and
 // wrapping chain don't survive the round-trip, only its message text.
 func (r *Result[T]) UnmarshalJSON(data []byte) error {
-	var keys map[string]json.RawMessage
+	var keys map[string]jsontext.Value
 	if err := json.Unmarshal(data, &keys); err != nil {
 		return err
 	}

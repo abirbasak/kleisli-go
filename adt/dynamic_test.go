@@ -1,12 +1,12 @@
 package adt_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/azuiktech/kleisli-go/adt"
+	"github.com/azuiktech/kleisli-go/fn"
 )
 
 type dynAlpha struct{ X int }
@@ -37,14 +37,14 @@ func TestDynamic_ConcurrentReads(t *testing.T) {
 				}
 
 				// Test MarshalJSON / UnmarshalJSON
-				data, err := json.Marshal(a)
+				data, err := fn.ToJSON(a).Unwrap()
 				if err != nil {
 					t.Errorf("Marshal error: %v", err)
 					return
 				}
 
-				var unmarshaled adt.Any
-				if err := json.Unmarshal(data, &unmarshaled); err != nil {
+				unmarshaled, err := fn.FromJSON[adt.Any](data).Unwrap()
+				if err != nil {
 					t.Errorf("Unmarshal error: %v", err)
 					return
 				}

@@ -292,7 +292,7 @@ vec.PushAll(10, 20, 30)
 ## Installation
 
 ```console
-go get github.com/azuiktech/kleisli-go@v0.22.0
+go get github.com/azuiktech/kleisli-go@v0.24.0
 ```
 
 Requires Go 1.27 or later (generic method type parameters).

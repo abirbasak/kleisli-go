@@ -1,10 +1,10 @@
 package adt_test
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/azuiktech/kleisli-go/adt"
+	"github.com/azuiktech/kleisli-go/fn"
 )
 
 func TestPairOf_and_accessors(t *testing.T) {
@@ -35,14 +35,14 @@ func TestPair_Unpack(t *testing.T) {
 
 func TestPair_JSON_roundtrip(t *testing.T) {
 	p := adt.PairOf("alpha", 123)
-	data, err := json.Marshal(p)
+	data, err := fn.ToJSON(p).Unwrap()
 	if err != nil {
-		t.Fatalf("json.Marshal failed: %v", err)
+		t.Fatalf("fn.ToJSON failed: %v", err)
 	}
 
-	var decoded adt.Pair[string, int]
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("json.Unmarshal failed: %v", err)
+	decoded, err := fn.FromJSON[adt.Pair[string, int]](data).Unwrap()
+	if err != nil {
+		t.Fatalf("fn.FromJSON failed: %v", err)
 	}
 
 	if decoded.First() != "alpha" || decoded.Second() != 123 {
@@ -51,8 +51,7 @@ func TestPair_JSON_roundtrip(t *testing.T) {
 }
 
 func TestPair_JSON_invalid(t *testing.T) {
-	var p adt.Pair[string, int]
-	if err := json.Unmarshal([]byte("invalid json"), &p); err == nil {
+	if fn.FromJSON[adt.Pair[string, int]]([]byte("invalid json")).IsOK() {
 		t.Fatal("Unmarshal invalid json should return error")
 	}
 }
@@ -92,14 +91,14 @@ func TestTriple_Unpack(t *testing.T) {
 
 func TestTriple_JSON_roundtrip(t *testing.T) {
 	tr := adt.TripleOf("x", 42, true)
-	data, err := json.Marshal(tr)
+	data, err := fn.ToJSON(tr).Unwrap()
 	if err != nil {
-		t.Fatalf("json.Marshal failed: %v", err)
+		t.Fatalf("fn.ToJSON failed: %v", err)
 	}
 
-	var decoded adt.Triple[string, int, bool]
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("json.Unmarshal failed: %v", err)
+	decoded, err := fn.FromJSON[adt.Triple[string, int, bool]](data).Unwrap()
+	if err != nil {
+		t.Fatalf("fn.FromJSON failed: %v", err)
 	}
 
 	if decoded.First() != "x" || decoded.Second() != 42 || !decoded.Third() {
@@ -108,8 +107,7 @@ func TestTriple_JSON_roundtrip(t *testing.T) {
 }
 
 func TestTriple_JSON_invalid(t *testing.T) {
-	var tr adt.Triple[string, int, bool]
-	if err := json.Unmarshal([]byte("invalid json"), &tr); err == nil {
+	if fn.FromJSON[adt.Triple[string, int, bool]]([]byte("invalid json")).IsOK() {
 		t.Fatal("Unmarshal invalid json should return error")
 	}
 }
