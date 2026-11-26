@@ -124,7 +124,7 @@ func (t *Triple[A, B, C]) UnmarshalJSON(data []byte) error {
 type Keyed[K, V any] = Pair[K, V]
 
 // Indexed pairs a value with its position in the sequence that produced it —
-// stream.Enumerate's and async.Pipe's Enumerate's element type. Unlike Pair
+// stream.EnumerateSeq's and async.Pipe's Enumerate's element type. Unlike Pair
 // and Triple, its fields are exported: callers construct and destructure it
 // via plain struct literals (Indexed[T]{Index: i, Value: v}), so both
 // packages can share this one type without a manual rewrap at the boundary.

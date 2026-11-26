@@ -25,7 +25,7 @@ import (
 )
 
 // Pipe wraps a channel for CSP-style pipeline composition — the
-// channel-backed counterpart to stream.Stream's slice-backed one.
+// channel-backed counterpart to stream.Seq.
 // Every Pipe carries a context; stages select on it so that cancelling
 // the context unblocks and exits all goroutines in the pipeline.
 type Pipe[T any] struct {
@@ -252,7 +252,7 @@ func (p Pipe[T]) RateLimit(ctx context.Context, lim *rate.Limiter) Pipe[T] {
 // stream.WindowFixed, but emitting incrementally instead of only once
 // the whole source is exhausted. The trailing chunk may be shorter than
 // n. A free function: Pipe[T] -> Pipe[[]T] hits the same "instantiation
-// cycle" compiler limit stream.Enumerate's own doc already flags for a
+// cycle" compiler limit stream.EnumerateSeq's own doc already flags for a
 // method of this shape. Panics if n < 1.
 func Window[T any](p Pipe[T], n int) Pipe[[]T] {
 	if n < 1 {
@@ -374,7 +374,7 @@ func (p Pipe[T]) All() iter.Seq[T] {
 }
 
 // Reduce folds every item into an accumulator of type U, draining p
-// fully — the same shape as stream.Stream's own Reduce.
+// fully — the same shape as stream.Seq's own Reduce.
 func (p Pipe[T]) Reduce[U any](initial U, fn func(U, T) U) U {
 	acc := initial
 	for item := range p.ch {

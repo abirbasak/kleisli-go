@@ -44,7 +44,7 @@ func ExecuteBatchTasksParallel(tasks []TaskItem, concurrency int) BatchProcessin
 	}
 
 	// Step 1: Execute worker in parallel over streams
-	results := stream.Of(tasks).
+	results := stream.SeqOf(tasks...).
 		Parallel(concurrency, worker).
 		Collect()
 

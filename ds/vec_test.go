@@ -348,7 +348,7 @@ func TestVec_IteratorsAndStreamIntegration(t *testing.T) {
 		t.Fatalf("unexpected AllWithIndex results: %v, %v", indices, elements)
 	}
 
-	// Stream integration
+	// Seq integration
 	doubledEvens := stream.FromSeq(v.All()).
 		Filter(func(n int) bool { return n > 15 }).
 		Map(func(n int) int { return n * 2 }).

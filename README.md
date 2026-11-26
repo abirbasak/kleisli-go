@@ -26,7 +26,7 @@ Comprehensive, function-by-function chapterwise API catalogs and real-world reci
 |---|---|---|
 | [Chapter 1: adt](docs/01_adt.md) | **Algebraic Data Types** | `Result[T]`, `Option[T]`, `Unit`/`Void`, `Lazy[T]`, `Any` dynamic box, `Pair`/`Triple`/`Keyed`/`Indexed`, JSON serialization |
 | [Chapter 2: fn](docs/02_fn.md) | **Functional Utilities** | Value helpers, bound predicates, point-free composition, rotated algorithms, parsers, string transforms |
-| [Chapter 3: stream](docs/03_stream.md) | **Data Pipelines** | Eager `Stream[T]`, lazy `Seq[T]`, numeric aggregations (`NumberStream`), async bridging |
+| [Chapter 3: stream](docs/03_stream.md) | **Data Pipelines** | Lazy `Seq[T]`, numeric aggregations (`NumberSeq`), async bridging |
 | [Chapter 4: async](docs/04_async.md) | **Concurrency & Coroutines** | CSP `Pipe[T]`, `Future`/`Promise`, `Task`/`Co` coroutine engine, `Sync[T]`, `Ctx[T]` |
 | [Chapter 5: ds](docs/05_ds.md) | **Data Structures** | Circular `RingBuffer`, thread-safe `SyncRingBuffer`, multi-indexed `Table[V]`, 2D `Grid[R, C, V]`, `Set[T]`, `Map[K, V]`, `Vec[T]`, `AdjList`, `IncidenceList` |
 | [Chapter 6: examples](docs/06_examples.md) | **Practical Recipes** | 10 production recipes (CORS/Auth, Batch URLs, Weather Coroutine, Graph Audit, etc.) |
@@ -116,20 +116,17 @@ afterFirst, afterSecond := fn.After(first, second, idx)
 
 ---
 
-### 3. `stream` — Eager & Lazy Data Pipelines
+### 3. `stream` — Lazy Data Pipelines
 
-`Stream[T]` provides an eager, slice-backed pipeline for collections requiring whole-dataset operations (sorting, reversing, grouping). `Seq[T]` provides a lazy, pull-based pipeline wrapping Go's `iter.Seq[T]` that short-circuits.
+`Seq[T]` is a lazy, pull-based view wrapping Go's `iter.Seq[T]`. It owns nothing and never copies elements.
 
-#### Eager Processing (`Stream[T]`)
 ```go
 // Group unpaid invoices by client using method references
-grouped := stream.Of(invoices).
+grouped := stream.SeqOf(invoices...).
     Filter(Invoice.IsUnpaid).
-    SortBy(Invoice.DueDate).
     GroupBy(Invoice.ClientID)
 ```
 
-#### Lazy Evaluation (`Seq[T]`)
 ```go
 // Short-circuits: stops pulling immediately on first match
 foundOpt := stream.FromSeq(generator).
@@ -137,16 +134,16 @@ foundOpt := stream.FromSeq(generator).
     First(matchesQuery) // adt.Option[T]
 ```
 
-#### Numeric Streams & Concurrency Bridge
+#### Numeric Seqs & Concurrency Bridge
 ```go
 // Numeric aggregations using method reference
-avgScore := stream.Of(grades).
+avgScore := stream.SeqOf(grades...).
     MapToNumber(Grade.Score).
     Mean().
     OrElse(0.0)
 
 // Bridge to concurrent worker pool without leaving the chain
-processed := stream.Of(urls).
+processed := stream.SeqOf(urls...).
     Parallel(8, fetchAndParse).
     Collect()
 ```

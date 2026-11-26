@@ -33,8 +33,8 @@ func AuditGraphTopology(startNode string, nodes map[string]GraphNodeSpec) adt.Re
 		return adt.Err[GraphAudit](fmt.Errorf("start node %q not found in graph registry", startNode))
 	}
 
-	// Step 1: Audit for invalid dual Fork + Ordinary transition configurations using stream.OfMap
-	if conflict := stream.OfMap(nodes).First(func(p adt.Pair[string, GraphNodeSpec]) bool {
+	// Step 1: Audit for invalid dual Fork + Ordinary transition configurations using stream.SeqOfMap
+	if conflict := stream.SeqOfMap(nodes).First(func(p adt.Pair[string, GraphNodeSpec]) bool {
 		return p.Second().IsFork && len(p.Second().Transitions) > 0
 	}); conflict.IsSome() {
 		return adt.Err[GraphAudit](fmt.Errorf("invalid graph config: node %q cannot be both a Fork and an ordinary transition source", conflict.MustGet().First()))
@@ -59,14 +59,14 @@ func AuditGraphTopology(startNode string, nodes map[string]GraphNodeSpec) adt.Re
 		}
 	}
 
-	// Step 3: Check unreachable nodes using stream.OfMap
-	if unreachable := stream.OfMap(nodes).First(func(p adt.Pair[string, GraphNodeSpec]) bool {
+	// Step 3: Check unreachable nodes using stream.SeqOfMap
+	if unreachable := stream.SeqOfMap(nodes).First(func(p adt.Pair[string, GraphNodeSpec]) bool {
 		return !visited[p.First()]
 	}); unreachable.IsSome() {
 		return adt.Err[GraphAudit](fmt.Errorf("unreachable node detected: node %q cannot be reached from start %q", unreachable.MustGet().First(), startNode))
 	}
 
-	reachableList := stream.OfMap(visited).
+	reachableList := stream.SeqOfMap(visited).
 		Map(func(p adt.Pair[string, bool]) string { return p.First() }).
 		Collect()
 

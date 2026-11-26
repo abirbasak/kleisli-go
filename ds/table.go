@@ -155,7 +155,7 @@ func (s *nonUniqueStorage[V, K]) insert(v *V) {
 func (s *nonUniqueStorage[V, K]) delete(v *V) {
 	k := s.extract(v)
 	adt.FromMap(s.data, k).Tap(func(items []*V) {
-		filtered := stream.Of(items).Filter(func(item *V) bool { return item != v }).Collect()
+		filtered := stream.SeqOf(items...).Filter(func(item *V) bool { return item != v }).Collect()
 		s.total -= len(items) - len(filtered)
 		if len(filtered) == 0 {
 			delete(s.data, k)
@@ -168,7 +168,7 @@ func (s *nonUniqueStorage[V, K]) delete(v *V) {
 func (s *nonUniqueStorage[V, K]) contains(v *V) bool {
 	return adt.FromMap(s.data, s.extract(v)).
 		Filter(func(items []*V) bool {
-			return stream.Of(items).AnyOf(func(item *V) bool { return item == v })
+			return stream.SeqOf(items...).AnyOf(func(item *V) bool { return item == v })
 		}).
 		IsSome()
 }
@@ -257,7 +257,7 @@ func NewTable[V any, PK comparable](pk Unique[V, PK], secondary ...Index[V]) *Ta
 	}
 	t.indexes[pk.id] = mainStorage
 
-	stream.Of(secondary).ForEach(func(idx Index[V]) {
+	stream.SeqOf(secondary...).ForEach(func(idx Index[V]) {
 		storage := idx.createStorage()
 		t.indexes[idx.indexID()] = storage
 		t.secondary = append(t.secondary, storage)
@@ -268,7 +268,7 @@ func NewTable[V any, PK comparable](pk Unique[V, PK], secondary ...Index[V]) *Ta
 // canInsertAll reports whether v satisfies the primary key and every secondary
 // unique index constraint.
 func (t *Table[V]) canInsertAll(v *V) bool {
-	return t.main.canInsert(v) && stream.Of(t.secondary).AllOf(func(idx internalIndex[V]) bool {
+	return t.main.canInsert(v) && stream.SeqOf(t.secondary...).AllOf(func(idx internalIndex[V]) bool {
 		return idx.canInsert(v)
 	})
 }
@@ -276,7 +276,7 @@ func (t *Table[V]) canInsertAll(v *V) bool {
 // insertAll adds v to the main table and every secondary index.
 func (t *Table[V]) insertAll(v *V) {
 	t.main.insert(v)
-	stream.Of(t.secondary).ForEach(func(idx internalIndex[V]) {
+	stream.SeqOf(t.secondary...).ForEach(func(idx internalIndex[V]) {
 		idx.insert(v)
 	})
 }
@@ -284,7 +284,7 @@ func (t *Table[V]) insertAll(v *V) {
 // deleteAll removes v from the main table and every secondary index.
 func (t *Table[V]) deleteAll(v *V) {
 	t.main.delete(v)
-	stream.Of(t.secondary).ForEach(func(idx internalIndex[V]) {
+	stream.SeqOf(t.secondary...).ForEach(func(idx internalIndex[V]) {
 		idx.delete(v)
 	})
 }
@@ -317,7 +317,7 @@ func (t *Table[V]) Len() int {
 // Clear removes all records from the main table and all secondary indexes.
 func (t *Table[V]) Clear() {
 	t.main.clear()
-	stream.Of(t.secondary).ForEach(func(idx internalIndex[V]) { idx.clear() })
+	stream.SeqOf(t.secondary...).ForEach(func(idx internalIndex[V]) { idx.clear() })
 }
 
 // All returns an iterator over all records stored in the main table.

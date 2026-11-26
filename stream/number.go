@@ -8,46 +8,6 @@ import (
 // Number is the set of Go's built-in numeric types, aliasing fn.Number.
 type Number = fn.Number
 
-// NumberStream is an eager numeric pipeline produced by Stream.MapToNumber.
-// Its methods (Sum, Product, Mean, Min, Max) are available because the
-// element type is constrained to Number.
-type NumberStream[N Number] struct {
-	inner Stream[N]
-}
-
-// MapToNumber projects each element to a numeric type N, returning a
-// NumberStream that exposes Sum, Product, Mean, Min, Max.
-func (s Stream[T]) MapToNumber[N Number](fn func(T) N) NumberStream[N] {
-	return NumberStream[N]{inner: s.Map(fn)}
-}
-
-func (s NumberStream[N]) Sum() N {
-	return s.inner.Reduce(N(0), func(acc, v N) N { return acc + v })
-}
-
-func (s NumberStream[N]) Product() N {
-	return s.inner.Reduce(N(1), func(acc, v N) N { return acc * v })
-}
-
-func (s NumberStream[N]) Mean() adt.Option[float64] {
-	sumCount := s.inner.Reduce(adt.PairOf(float64(0), 0), func(acc adt.Pair[float64, int], v N) adt.Pair[float64, int] {
-		return adt.PairOf(acc.First()+float64(v), acc.Second()+1)
-	})
-	sum, count := sumCount.Unpack()
-	if count == 0 {
-		return adt.None[float64]()
-	}
-	return adt.Some(sum / float64(count))
-}
-
-func (s NumberStream[N]) Min() adt.Option[N] {
-	return s.inner.MinBy(func(v N) N { return v })
-}
-
-func (s NumberStream[N]) Max() adt.Option[N] {
-	return s.inner.MaxBy(func(v N) N { return v })
-}
-
 // NumberSeq is a lazy numeric pipeline produced by Seq.MapToNumber.
 type NumberSeq[N Number] struct {
 	inner Seq[N]
