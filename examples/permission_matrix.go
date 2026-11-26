@@ -26,7 +26,7 @@ type UserAccount struct {
 
 // FilterAuthorizedUsers returns IDs of users having all required permissions.
 func FilterAuthorizedUsers(accounts []UserAccount, requiredPermissions uint32) []string {
-	return stream.Of(accounts).
+	return stream.SeqOf(accounts...).
 		Filter(func(u UserAccount) bool {
 			// Check bitmask: user must have all required permission bits set
 			return (u.Permissions & requiredPermissions) == requiredPermissions
@@ -39,7 +39,7 @@ func FilterAuthorizedUsers(accounts []UserAccount, requiredPermissions uint32) [
 
 // HasAllPermissions checks if all users in a department satisfy a required permission set.
 func HasAllPermissions(accounts []UserAccount, department string, requiredPermissions uint32) bool {
-	deptUsers := stream.Of(accounts).
+	deptUsers := stream.SeqOf(accounts...).
 		Filter(func(u UserAccount) bool { return u.Department == department }).
 		Collect()
 
@@ -47,7 +47,7 @@ func HasAllPermissions(accounts []UserAccount, department string, requiredPermis
 		return false
 	}
 
-	return stream.Of(deptUsers).AllOf(func(u UserAccount) bool {
+	return stream.SeqOf(deptUsers...).AllOf(func(u UserAccount) bool {
 		return (u.Permissions & requiredPermissions) == requiredPermissions
 	})
 }

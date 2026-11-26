@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/azuiktech/kleisli-go/adt"
@@ -168,7 +169,7 @@ func TestSeq_All_RangeOverFunc(t *testing.T) {
 }
 
 func TestSeq_First_ShortCircuitsAcrossFilterAndMap(t *testing.T) {
-	// The whole point of Seq over Stream: this must NOT process all 1000
+	// Laziness: this must NOT process all 1000
 	// upstream items just because Filter and Map are chained before First.
 	calls := 0
 	source := func(yield func(int) bool) {
@@ -319,38 +320,6 @@ func TestSeq_Gather_ScanWindowFold(t *testing.T) {
 	}
 }
 
-// TestStreamAndSeq_AgreeOnResults proves the shared-implementation
-// property directly: Stream and Seq, given the same input and the same
-// operation, must produce identical results — that's the whole reason
-// they share an engine instead of two independently maintained loops.
-func TestStreamAndSeq_AgreeOnResults(t *testing.T) {
-	items := []int{5, 3, 8, 1, 9, 2, 7, 4, 6}
-	double := func(n int) int { return n * 2 }
-	even := func(n int) bool { return n%2 == 0 }
-
-	streamResult := Of(items).Filter(even).Map(double).Collect()
-	seqResult := FromSeq(slices.Values(items)).Filter(even).Map(double).Collect()
-
-	if !reflect.DeepEqual(streamResult, seqResult) {
-		t.Errorf("Stream result %v != Seq result %v for the same Filter+Map pipeline", streamResult, seqResult)
-	}
-}
-
-func TestFromSlice_IsOf(t *testing.T) {
-	got := FromSlice([]int{1, 2, 3}).Collect()
-	want := []int{1, 2, 3}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("FromSlice().Collect() = %v, want %v", got, want)
-	}
-}
-
-func TestToStream_Materializes(t *testing.T) {
-	got := FromSeq(slices.Values([]int{1, 2, 3})).ToStream().Collect()
-	if want := []int{1, 2, 3}; !reflect.DeepEqual(got, want) {
-		t.Errorf("ToStream().Collect() = %v, want %v", got, want)
-	}
-}
-
 func TestOption_All(t *testing.T) {
 	if got := FromSeq(adt.Some(7).All()).Collect(); !reflect.DeepEqual(got, []int{7}) {
 		t.Errorf("FromSeq(Some.All()) = %v, want [7]", got)
@@ -370,7 +339,8 @@ func TestOption_All(t *testing.T) {
 
 func TestSeqOfMap(t *testing.T) {
 	m := map[string]int{"a": 1, "b": 2}
-	got := SeqOfMap(m).ToStream().SortBy(func(p adt.Pair[string, int]) string { return p.First() }).Collect()
+	got := SeqOfMap(m).Collect()
+	slices.SortFunc(got, func(a, b adt.Pair[string, int]) int { return strings.Compare(a.First(), b.First()) })
 	want := []adt.Pair[string, int]{adt.PairOf("a", 1), adt.PairOf("b", 2)}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("SeqOfMap() sorted = %+v, want %+v", got, want)
@@ -744,4 +714,24 @@ func TestSeq2_RoundTripThroughMap(t *testing.T) {
 	if !reflect.DeepEqual(got, m) {
 		t.Errorf("round trip = %v, want %v", got, m)
 	}
+}
+
+func TestSeq_WindowSliding(t *testing.T) {
+	got := SeqOf(1, 2, 3, 4).Gather(WindowSliding[int](2)).Collect()
+	want := [][]int{{1, 2}, {2, 3}, {3, 4}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("WindowSliding(2) = %v, want %v", got, want)
+	}
+	if &got[0][0] == &got[1][0] {
+		t.Error("WindowSliding windows share backing arrays, want independent copies")
+	}
+}
+
+func TestWindowSliding_PanicsOnZero(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("WindowSliding(0) should panic")
+		}
+	}()
+	WindowSliding[int](0)
 }

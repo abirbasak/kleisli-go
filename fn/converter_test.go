@@ -168,7 +168,7 @@ func TestJSONPipelineIntegration(t *testing.T) {
 	}
 
 	// 1. Serialize stream of structs to stream of JSON strings
-	jsonStrings := stream.Of(users).
+	jsonStrings := stream.SeqOf(users...).
 		Map(fn.ToJSONString[sampleUser]).
 		Filter(func(r adt.Result[string]) bool { return r.IsOK() }).
 		Map(func(r adt.Result[string]) string { return r.MustGet() }).
@@ -179,7 +179,7 @@ func TestJSONPipelineIntegration(t *testing.T) {
 	}
 
 	// 2. Deserialize stream of JSON strings back to structs
-	roundtripped := stream.Of(jsonStrings).
+	roundtripped := stream.SeqOf(jsonStrings...).
 		Map(fn.FromJSONString[sampleUser]).
 		Filter(func(r adt.Result[sampleUser]) bool { return r.IsOK() }).
 		Map(func(r adt.Result[sampleUser]) sampleUser { return r.MustGet() }).
@@ -404,12 +404,12 @@ func TestURLEncoding(t *testing.T) {
 	})
 }
 
-// ── Stream Integration tests ──────────────────────────────────────────────────
+// ── Seq Integration tests ───────────────────────────────────────────────────
 
 func TestConverter_StreamIntegration(t *testing.T) {
 	t.Run("stream parsing numbers", func(t *testing.T) {
 		rawNumbers := []string{"10", "20", "invalid", "30"}
-		parsed := stream.Of(rawNumbers).
+		parsed := stream.SeqOf(rawNumbers...).
 			Map(fn.Parse[int]).
 			Filter(func(r adt.Result[int]) bool { return r.IsOK() }).
 			Map(func(r adt.Result[int]) int { return r.MustGet() }).
@@ -423,7 +423,7 @@ func TestConverter_StreamIntegration(t *testing.T) {
 
 	t.Run("stream parsing durations", func(t *testing.T) {
 		rawDurations := []string{"1s", "2m", "3h"}
-		durations := stream.Of(rawDurations).
+		durations := stream.SeqOf(rawDurations...).
 			Map(fn.ParseDuration).
 			Filter(func(r adt.Result[time.Duration]) bool { return r.IsOK() }).
 			Map(func(r adt.Result[time.Duration]) time.Duration { return r.MustGet() }).
@@ -437,12 +437,12 @@ func TestConverter_StreamIntegration(t *testing.T) {
 
 	t.Run("stream base64 roundtrip", func(t *testing.T) {
 		items := []string{"apple", "banana", "cherry"}
-		encoded := stream.Of(items).
+		encoded := stream.SeqOf(items...).
 			Map(func(s string) []byte { return []byte(s) }).
 			Map(fn.ToBase64).
 			Collect()
 
-		decoded := stream.Of(encoded).
+		decoded := stream.SeqOf(encoded...).
 			Map(fn.FromBase64String).
 			Filter(func(r adt.Result[string]) bool { return r.IsOK() }).
 			Map(func(r adt.Result[string]) string { return r.MustGet() }).

@@ -59,7 +59,7 @@ func (g *Grid[R, C, V]) Remove(r R, c C) adt.Option[V] {
 		delete(g.cells, k)
 
 		adt.FromMap(g.rowCols, r).Tap(func(cols []C) {
-			filtered := stream.Of(cols).Filter(func(col C) bool { return col != c }).Collect()
+			filtered := stream.SeqOf(cols...).Filter(func(col C) bool { return col != c }).Collect()
 			if len(filtered) == 0 {
 				delete(g.rowCols, r)
 			} else {
@@ -68,7 +68,7 @@ func (g *Grid[R, C, V]) Remove(r R, c C) adt.Option[V] {
 		})
 
 		adt.FromMap(g.colRows, c).Tap(func(rows []R) {
-			filtered := stream.Of(rows).Filter(func(row R) bool { return row != r }).Collect()
+			filtered := stream.SeqOf(rows...).Filter(func(row R) bool { return row != r }).Collect()
 			if len(filtered) == 0 {
 				delete(g.colRows, c)
 			} else {

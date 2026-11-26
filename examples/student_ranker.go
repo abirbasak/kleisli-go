@@ -35,7 +35,7 @@ type StudentSummary struct {
 // SelectMostConsistentTopStudent executes the algorithmic pipeline using kleisli-go streams.
 func SelectMostConsistentTopStudent(students []Student, minAssignments int, minAvg float64, topK int) adt.Option[StudentSummary] {
 	// Step 1: Filter and map to StudentSummary
-	summaries := stream.Of(students).
+	summaries := stream.SeqOf(students...).
 		Filter(func(s Student) bool {
 			if len(s.Scores) < minAssignments {
 				return false
@@ -65,7 +65,7 @@ func SelectMostConsistentTopStudent(students []Student, minAssignments int, minA
 	})
 
 	// Step 3: Take top K candidates
-	topCandidates := stream.Of(summaries).Take(topK).Collect()
+	topCandidates := stream.SeqOf(summaries...).Take(topK).Collect()
 
 	// Step 4: Sort top candidates ascending by score variance (minimum variance first)
 	sort.Slice(topCandidates, func(i, j int) bool {

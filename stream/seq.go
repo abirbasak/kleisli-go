@@ -1,3 +1,10 @@
+// Package stream provides Seq[T], a lazy, pull-based view over the
+// standard library's iter.Seq[T]. A Seq owns nothing: it views a
+// container or a generator, and elements are never copied.
+//
+//	totals := stream.SeqOf(invoices...).
+//	    Filter(func(inv Invoice) bool { return inv.Status == Unpaid }).
+//	    GroupBy(func(inv Invoice) string { return inv.ClientID })
 package stream
 
 import (
@@ -9,19 +16,8 @@ import (
 	"github.com/azuiktech/kleisli-go/fn"
 )
 
-// Seq wraps an iter.Seq[T] — Stream's lazy, pull-based counterpart, safe
-// over arbitrary sources including unbounded ones. Every method here
-// works incrementally: none needs to see the whole sequence to make
-// progress or produce correct output. Operations that do (sorting,
-// reversing, grouping) exist only on Stream, reachable via Collect —
-// sound there specifically because a slice is always finite and already
-// in memory; unsound here, since a Seq might not be.
-//
-// Filter/Map/TakeWhile/... below and Stream's own versions of the same
-// names share one implementation (the unexported *Seq engine functions
-// in this file) — a Stream just runs it via slices.Values then collects
-// immediately, so the two can never silently disagree about what an
-// operation means.
+// Seq wraps an iter.Seq[T] — a lazy, pull-based view, safe over arbitrary
+// sources including unbounded ones.
 type Seq[T any] struct {
 	seq iter.Seq[T]
 }
@@ -45,8 +41,7 @@ func SeqOf[T any](items ...T) Seq[T] {
 //	for x := range s.All() { ... }
 func (s Seq[T]) All() iter.Seq[T] { return s.seq }
 
-// SeqOfMap wraps a map's entries as a Seq of adt.Pair — the lazy counterpart
-// of stream.OfMap. Map iteration order is randomized by Go, so callers
+// SeqOfMap wraps a map's entries as a Seq of adt.Pair. Map iteration order is randomized by Go, so callers
 // needing a deterministic order should collect and sort.
 func SeqOfMap[K comparable, V any](m map[K]V) Seq[adt.Pair[K, V]] {
 	return FromSeq(func(yield func(adt.Pair[K, V]) bool) {
@@ -173,8 +168,7 @@ func (s Seq[T]) FlatMap[U any](fn func(T) []U) Seq[U] {
 	return Seq[U]{seq: flatMapSeq(s.seq, fn)}
 }
 
-// takeSeq is Take's shared engine — a pull-based counter, since an
-// arbitrary Seq has no random access to reslice the way a Stream does.
+// takeSeq is Take's engine — a pull-based counter.
 func takeSeq[T any](seq iter.Seq[T], n int) iter.Seq[T] {
 	return func(yield func(T) bool) {
 		if n <= 0 {
@@ -294,14 +288,8 @@ func (s Seq[T]) Reduce[U any](initial U, fn func(U, T) U) U {
 // materialization, same status as any other terminal.
 func (s Seq[T]) Collect() []T { return slices.Collect(s.seq) }
 
-// ToStream materializes the Seq into an eager Stream. This forces full
-// evaluation — choose Stream over Seq when downstream operations need
-// the whole collection at once (sorting, reversing, grouping).
-func (s Seq[T]) ToStream() Stream[T] { return Of(s.Collect()) }
-
-// gatherSeq is Gather's shared engine — the same Gatherer value Stream
-// uses, driven by a pull instead of a slice loop, emitting as it goes
-// rather than building one output slice.
+// gatherSeq is Gather's engine, driven by a pull and emitting as it
+// goes rather than building one output slice.
 func gatherSeq[T, A, U any](seq iter.Seq[T], g Gatherer[T, A, U]) iter.Seq[U] {
 	return func(yield func(U) bool) {
 		state := g.Init()
@@ -336,7 +324,7 @@ func (s Seq[T]) Gather[A, U any](g Gatherer[T, A, U]) Seq[U] {
 }
 
 // MapMulti: fn gets each element plus an emit callback it can call zero,
-// one, or many times — see Stream.MapMulti.
+// one, or many times — Java's mapMulti.
 func (s Seq[T]) MapMulti[U any](fn func(item T, emit func(U))) Seq[U] {
 	return s.Gather(statelessGatherer(fn))
 }
@@ -370,22 +358,20 @@ func (s Seq[T]) DistinctBy[K comparable](fn func(T) K) Seq[T] {
 
 // DistinctSeq keeps only the first occurrence of each element, by direct
 // equality — Seq's own Distinct; a method can't narrow Seq[T]'s T to
-// comparable, only a function generic over its own T can (same reasoning
-// as Stream's own Distinct).
+// comparable, only a function generic over its own T can.
 func DistinctSeq[T comparable](s Seq[T]) Seq[T] {
 	return s.DistinctBy(func(t T) T { return t })
 }
 
 // EnumerateSeq pairs each element with its zero-based index — Seq's own
-// Enumerate. A free function, not a method, for the same
-// instantiation-cycle reason Stream's Enumerate already is.
+// Enumerate. A free function, not a method: go1.27 rejects a method on
+// Seq[T] returning Seq[Wrapper[T]] as a false instantiation cycle.
 func EnumerateSeq[T any](s Seq[T]) Seq[adt.Indexed[T]] {
 	return s.Gather(enumerateGatherer[T]())
 }
 
 // FlattenSeq collapses a Seq[[]T] into a Seq[T], yielding each inner slice's
-// elements in order. Named to match DistinctSeq / EnumerateSeq rather than
-// shadowing stream.Flatten.
+// elements in order.
 func FlattenSeq[T any](s Seq[[]T]) Seq[T] {
 	return Seq[T]{seq: flatMapSeq(s.seq, func(sl []T) []T { return sl })}
 }

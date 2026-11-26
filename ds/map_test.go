@@ -228,7 +228,7 @@ func TestMap_IteratorsAndStreamIntegration(t *testing.T) {
 		t.Fatalf("unexpected values: %v", values)
 	}
 
-	// Stream integration over Values
+	// Seq integration over Values
 	sum := stream.FromSeq(m.Values()).
 		Reduce(0, func(acc, v int) int { return acc + v })
 	if sum != 60 {

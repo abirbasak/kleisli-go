@@ -300,7 +300,7 @@ Both types round-trip through JSON (`MarshalJSON`/`UnmarshalJSON`) as `{"first":
 type Keyed[K, V any] = Pair[K, V]
 ```
 
-A plain alias, not a new type — `Keyed[K, V]` is `Pair[K, V]`, used where a pair is conceptually a map entry. `Stream.ToMapBy`/`Seq.ToMapBy` take a `func(T) (K, V)` projection, which `p.Unpack()` supplies directly for a `Pair`/`Keyed` element; `fn.Key`/`fn.Value` (below) extract one side at a time.
+A plain alias, not a new type — `Keyed[K, V]` is `Pair[K, V]`, used where a pair is conceptually a map entry. `Seq.ToMapBy` takes a `func(T) (K, V)` projection, which `p.Unpack()` supplies directly for a `Pair`/`Keyed` element; `fn.Key`/`fn.Value` (below) extract one side at a time.
 
 ### Indexed[T]
 
@@ -311,7 +311,7 @@ type Indexed[T any] struct {
 }
 ```
 
-Pairs a value with its position in the sequence that produced it — the element type of `stream.Enumerate`/`stream.EnumerateSeq` and `async.Pipe`'s `Enumerate`. Unlike `Pair`/`Triple`, its fields are exported, so callers construct and destructure it with plain struct literals (`adt.Indexed[T]{Index: i, Value: v}`). `stream` and `async` both reference this one type directly (there is no `stream.Indexed`/`async.Indexed`), so a value produced by one package's `Enumerate` feeds directly into the other's `Ordered`/`OrderedN` with no conversion.
+Pairs a value with its position in the sequence that produced it — the element type of `stream.EnumerateSeq` and `async.Pipe`'s `Enumerate`. Unlike `Pair`/`Triple`, its fields are exported, so callers construct and destructure it with plain struct literals (`adt.Indexed[T]{Index: i, Value: v}`). `stream` and `async` both reference this one type directly (there is no `stream.Indexed`/`async.Indexed`), so a value produced by one package's `Enumerate` feeds directly into the other's `Ordered`/`OrderedN` with no conversion.
 
 ---
 
@@ -403,7 +403,7 @@ func (cmd CreateAccountCmd) Validate() adt.Result[CreateAccountCmd] {
 
 func ValidateBatch(commands []CreateAccountCmd) adt.Result[[]CreateAccountCmd] {
     // Validate each command, producing []Result[CreateAccountCmd]
-    validationResults := stream.Of(commands).
+    validationResults := stream.SeqOf(commands...).
         Map(CreateAccountCmd.Validate).
         Collect()
 

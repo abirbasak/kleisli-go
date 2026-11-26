@@ -388,8 +388,8 @@ func TestSet_IteratorAndStreamIntegration(t *testing.T) {
 		t.Fatalf("stream.FromSeq want [20 30], got %v", evens)
 	}
 
-	// Kleisli-go stream.Of(s.ToSlice()) integration
-	sum := stream.Of(s.ToSlice()).
+	// Kleisli-go stream.SeqOf(s.ToSlice()...) integration
+	sum := stream.SeqOf(s.ToSlice()...).
 		Reduce(0, func(acc, v int) int { return acc + v })
 	if sum != 60 {
 		t.Fatalf("stream.Reduce sum want 60, got %d", sum)

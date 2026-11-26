@@ -10,7 +10,7 @@ This chapter catalogs the 10 real-world design pattern implementations located i
 **Pattern:** Declarative header extraction, wildcard domain verification, and fallible token validation.
 
 - **Extraction without slicing**: Uses `strings.CutPrefix` lifted into `adt.FromOk(...)` to extract the Bearer token without manual string index slicing.
-- **Declarative CORS policy**: Matches incoming origins against allowed patterns (`*`, exact match, or wildcard suffix `*.domain.com`) using `stream.Of(allowedOrigins).Any(...)`.
+- **Declarative CORS policy**: Matches incoming origins against allowed patterns (`*`, exact match, or wildcard suffix `*.domain.com`) using `stream.SeqOf(allowedOrigins...).Any(...)`.
 - **Pipeline composition**: Validates CORS policy first, converts `Option[string]` to `Result[string]` with `ToResultGet`, and verifies revocation status with `FlatMap`.
 
 ```go
@@ -65,13 +65,13 @@ func ProcessBatchURLs(urls []string, concurrency int) BatchMetrics {
 ## 3. High-Throughput Parallel Batch Processor (`parallel_batch_processor.go`)
 
 **Domain:** Parallel Processing / Data Ingestion  
-**Pattern:** In-flight batch parallelization using `stream.Stream.Parallel`.
+**Pattern:** In-flight batch parallelization using `stream.Seq.Parallel`.
 
-- **Bridging Stream to CSP**: Wraps in-memory tasks into `stream.Of(tasks)`, applies bounded concurrency with `s.Parallel(workerCount, executeTask)`, and separates outputs into success/failure aggregates.
+- **Bridging Seq to CSP**: Wraps in-memory tasks into `stream.SeqOf(tasks...)`, applies bounded concurrency with `s.Parallel(workerCount, executeTask)`, and separates outputs into success/failure aggregates.
 
 ```go
 func ExecuteBatchTasksParallel(tasks []TaskItem, concurrency int) BatchReport {
-    results := stream.Of(tasks).
+    results := stream.SeqOf(tasks...).
         Parallel(concurrency, func(task TaskItem) adt.Result[string] {
             return processTask(task)
         }).
@@ -146,10 +146,10 @@ func ApplyUserPatch(entity UserEntity, patch UserPatch) UserEntity {
 ## 6. Directed Graph Reachability Auditor (`graph_reachability.go`)
 
 **Domain:** Graph Algorithms / Workflow Engine Verification  
-**Pattern:** Breadth-First Search (BFS) graph traversal and reachability validation with `stream.OfMap`.
+**Pattern:** Breadth-First Search (BFS) graph traversal and reachability validation with `stream.SeqOfMap`.
 
-- **Constraint checking**: Traverses node maps via `stream.OfMap(nodes).First(...)` to detect nodes misconfigured as both fork points and transition sources.
-- **Unreachable node detection**: Traverses the graph via BFS from `startNode`, then uses `stream.OfMap` to flag any node missing from the visited set as an explicit error.
+- **Constraint checking**: Traverses node maps via `stream.SeqOfMap(nodes).First(...)` to detect nodes misconfigured as both fork points and transition sources.
+- **Unreachable node detection**: Traverses the graph via BFS from `startNode`, then uses `stream.SeqOfMap` to flag any node missing from the visited set as an explicit error.
 
 ```go
 func AuditGraphTopology(startNode string, nodes map[string]GraphNodeSpec) adt.Result[GraphAudit] {
@@ -158,7 +158,7 @@ func AuditGraphTopology(startNode string, nodes map[string]GraphNodeSpec) adt.Re
     }
 
     // Check invalid dual Fork configuration
-    if conflict := stream.OfMap(nodes).First(func(p adt.Pair[string, GraphNodeSpec]) bool {
+    if conflict := stream.SeqOfMap(nodes).First(func(p adt.Pair[string, GraphNodeSpec]) bool {
         return p.Second().IsFork && len(p.Second().Transitions) > 0
     }); conflict.IsSome() {
         return adt.Err[GraphAudit](fmt.Errorf("invalid fork: %s", conflict.MustGet().First()))
@@ -197,14 +197,14 @@ func MemoizedFibonacci() func(int) uint64 {
 ## 8. Bitmask Permission Matrix Aggregator (`permission_matrix.go`)
 
 **Domain:** Security / RBAC / Authorization  
-**Pattern:** Declarative authorization filtering over bitmask permissions using `stream.Of`.
+**Pattern:** Declarative authorization filtering over bitmask permissions using `stream.SeqOf`.
 
-- **Filtering authorized users**: Filters account slices using `stream.Of(accounts).Filter(...)` and bitwise AND checks (`(acc.Permissions & required) == required`).
-- **Universal department audit**: Evaluates whether all department members hold required permissions via `stream.Of(accounts).Filter(...).All(...)`.
+- **Filtering authorized users**: Filters account slices using `stream.SeqOf(accounts...).Filter(...)` and bitwise AND checks (`(acc.Permissions & required) == required`).
+- **Universal department audit**: Evaluates whether all department members hold required permissions via `stream.SeqOf(accounts...).Filter(...).All(...)`.
 
 ```go
 func FilterAuthorizedUsers(accounts []UserAccount, required Permission) []UserAccount {
-    return stream.Of(accounts).Filter(func(acc UserAccount) bool {
+    return stream.SeqOf(accounts...).Filter(func(acc UserAccount) bool {
         return (acc.Permissions & required) == required
     }).Collect()
 }
@@ -218,7 +218,7 @@ func FilterAuthorizedUsers(accounts []UserAccount, required Permission) []UserAc
 **Pattern:** Deferred initialization of base templates and validation of required variable placeholders.
 
 - **Lazy singleton compilation**: Compiles the default system instruction template once on first demand using `adt.Defer`.
-- **Placeholder substitution**: Checks that all required placeholder tokens exist via `stream.Of(requiredVars).First(...)` before performing string replacements.
+- **Placeholder substitution**: Checks that all required placeholder tokens exist via `stream.SeqOf(requiredVars...).First(...)` before performing string replacements.
 
 ```go
 var DefaultSystemInstructions = adt.Defer(func() adt.Result[PromptTemplate] {
@@ -233,7 +233,7 @@ func BuildInstructionPrompt(customBody adt.Option[string], domain, role string) 
     return DefaultSystemInstructions.Get().FlatMap(func(defaultPrompt PromptTemplate) adt.Result[string] {
         body := customBody.OrElse(defaultPrompt.RawBody)
 
-        if missing := stream.Of(defaultPrompt.RequiredVars).First(func(v string) bool {
+        if missing := stream.SeqOf(defaultPrompt.RequiredVars...).First(func(v string) bool {
             return !strings.Contains(body, v)
         }); missing.IsSome() {
             return adt.Err[string](fmt.Errorf("missing variable %q", missing.MustGet()))

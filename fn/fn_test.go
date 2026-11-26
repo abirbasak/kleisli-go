@@ -472,7 +472,7 @@ func TestIn_StreamIntegration(t *testing.T) {
 	t.Run("subset", func(t *testing.T) {
 		userRoles := []string{"admin", "editor"}
 		validRoles := []string{"admin", "editor", "owner"}
-		isSubset := stream.Of(userRoles).AllOf(fn.In(validRoles...))
+		isSubset := stream.SeqOf(userRoles...).AllOf(fn.In(validRoles...))
 		if !isSubset {
 			t.Fatal("expected userRoles to be a subset of validRoles")
 		}
@@ -480,7 +480,7 @@ func TestIn_StreamIntegration(t *testing.T) {
 
 	t.Run("intersection / hasAny", func(t *testing.T) {
 		userRoles := []string{"viewer", "editor"}
-		hasOverlap := stream.Of(userRoles).AnyOf(fn.In("admin", "editor"))
+		hasOverlap := stream.SeqOf(userRoles...).AnyOf(fn.In("admin", "editor"))
 		if !hasOverlap {
 			t.Fatal("expected userRoles to intersect with admin/editor")
 		}
@@ -488,7 +488,7 @@ func TestIn_StreamIntegration(t *testing.T) {
 
 	t.Run("disjoint", func(t *testing.T) {
 		userRoles := []string{"viewer", "guest"}
-		hasOverlap := stream.Of(userRoles).AnyOf(fn.In("admin", "editor"))
+		hasOverlap := stream.SeqOf(userRoles...).AnyOf(fn.In("admin", "editor"))
 		if hasOverlap {
 			t.Fatal("expected userRoles to be disjoint from admin/editor")
 		}
@@ -496,7 +496,7 @@ func TestIn_StreamIntegration(t *testing.T) {
 
 	t.Run("filter", func(t *testing.T) {
 		input := []string{"admin", "viewer", "editor", "guest"}
-		filtered := stream.Of(input).Filter(fn.In("admin", "editor")).Collect()
+		filtered := stream.SeqOf(input...).Filter(fn.In("admin", "editor")).Collect()
 		if len(filtered) != 2 || filtered[0] != "admin" || filtered[1] != "editor" {
 			t.Fatalf("unexpected filtered: %v", filtered)
 		}
@@ -504,7 +504,7 @@ func TestIn_StreamIntegration(t *testing.T) {
 
 	t.Run("constant in map", func(t *testing.T) {
 		nums := []int{1, 2, 3}
-		mapped := stream.Of(nums).Map(fn.Constant[int, string]("x")).Collect()
+		mapped := stream.SeqOf(nums...).Map(fn.Constant[int, string]("x")).Collect()
 		if len(mapped) != 3 || mapped[0] != "x" || mapped[1] != "x" || mapped[2] != "x" {
 			t.Fatalf("unexpected mapped: %v", mapped)
 		}
@@ -521,12 +521,12 @@ func TestTrue_and_False(t *testing.T) {
 		t.Fatal("False should return false for any input")
 	}
 
-	first := stream.Of([]int{10, 20, 30}).First(fn.True)
+	first := stream.SeqOf(10, 20, 30).First(fn.True)
 	if !first.IsSome() || first.MustGet() != 10 {
 		t.Fatalf("First(fn.True) = %v, want Some(10)", first)
 	}
 
-	filtered := stream.Of([]int{1, 2, 3}).Filter(fn.False).Collect()
+	filtered := stream.SeqOf(1, 2, 3).Filter(fn.False).Collect()
 	if len(filtered) != 0 {
 		t.Fatalf("Filter(fn.False) = %v, want empty", filtered)
 	}
@@ -564,7 +564,7 @@ func TestIsNonZero(t *testing.T) {
 		t.Fatal(`IsNonZero("abc") should be true`)
 	}
 
-	got := stream.Of([]string{"a", "", "b", "", "c"}).Filter(fn.IsNonZero).Collect()
+	got := stream.SeqOf("a", "", "b", "", "c").Filter(fn.IsNonZero).Collect()
 	if len(got) != 3 || got[0] != "a" || got[1] != "b" || got[2] != "c" {
 		t.Fatalf("Filter(fn.IsNonZero) = %v, want [a b c]", got)
 	}
@@ -591,7 +591,7 @@ func TestIsNil_and_IsNotNil(t *testing.T) {
 		t.Fatal("IsNotNil(nonNil) should be true")
 	}
 
-	filtered := stream.Of([]*int{nonNilPtr, nilPtr, nonNilPtr}).Filter(fn.IsNotNil).Collect()
+	filtered := stream.SeqOf(nonNilPtr, nilPtr, nonNilPtr).Filter(fn.IsNotNil).Collect()
 	if len(filtered) != 2 {
 		t.Fatalf("Filter(fn.IsNotNil) length = %d, want 2", len(filtered))
 	}
@@ -687,12 +687,12 @@ func TestFirst_Second_Third_StreamIntegration(t *testing.T) {
 		adt.PairOf(3, "c"),
 	}
 
-	firsts := stream.Of(pairs).Map(fn.First).Collect()
+	firsts := stream.SeqOf(pairs...).Map(fn.First).Collect()
 	if len(firsts) != 3 || firsts[0] != 1 || firsts[1] != 2 || firsts[2] != 3 {
 		t.Fatalf("stream.Map(First) = %v, want [1 2 3]", firsts)
 	}
 
-	seconds := stream.Of(pairs).Map(fn.Second).Collect()
+	seconds := stream.SeqOf(pairs...).Map(fn.Second).Collect()
 	if len(seconds) != 3 || seconds[0] != "a" || seconds[1] != "b" || seconds[2] != "c" {
 		t.Fatalf("stream.Map(Second) = %v, want [a b c]", seconds)
 	}
@@ -702,17 +702,17 @@ func TestFirst_Second_Third_StreamIntegration(t *testing.T) {
 		adt.TripleOf("y", 20, false),
 	}
 
-	trFirsts := stream.Of(triples).Map(fn.First).Collect()
+	trFirsts := stream.SeqOf(triples...).Map(fn.First).Collect()
 	if len(trFirsts) != 2 || trFirsts[0] != "x" || trFirsts[1] != "y" {
 		t.Fatalf("stream.Map(First) on triples = %v, want [x y]", trFirsts)
 	}
 
-	trSeconds := stream.Of(triples).Map(fn.Second).Collect()
+	trSeconds := stream.SeqOf(triples...).Map(fn.Second).Collect()
 	if len(trSeconds) != 2 || trSeconds[0] != 10 || trSeconds[1] != 20 {
 		t.Fatalf("stream.Map(Second) on triples = %v, want [10 20]", trSeconds)
 	}
 
-	trThirds := stream.Of(triples).Map(fn.Third).Collect()
+	trThirds := stream.SeqOf(triples...).Map(fn.Third).Collect()
 	if len(trThirds) != 2 || trThirds[0] != true || trThirds[1] != false {
 		t.Fatalf("stream.Map(Third) on triples = %v, want [true false]", trThirds)
 	}
