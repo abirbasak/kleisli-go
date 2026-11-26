@@ -58,6 +58,30 @@ func SeqOfMap[K comparable, V any](m map[K]V) Seq[adt.Pair[K, V]] {
 	})
 }
 
+// FromSeq2 views an iter.Seq2 as a Seq of adt.Pair, one pair per
+// (key, value) the source yields.
+func FromSeq2[K, V any](seq iter.Seq2[K, V]) Seq[adt.Pair[K, V]] {
+	return FromSeq(func(yield func(adt.Pair[K, V]) bool) {
+		for k, v := range seq {
+			if !yield(adt.PairOf(k, v)) {
+				return
+			}
+		}
+	})
+}
+
+// ToSeq2 views a Seq of adt.Pair as an iter.Seq2, for code that ranges
+// over two values.
+func ToSeq2[K, V any](s Seq[adt.Pair[K, V]]) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		for p := range s.seq {
+			if !yield(p.Unpack()) {
+				return
+			}
+		}
+	}
+}
+
 // Iterate yields seed, next(seed), next(next(seed)), … without end.
 // next runs only when the following element is pulled.
 func Iterate[T any](seed T, next func(T) T) Seq[T] {

@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"maps"
 	"reflect"
 	"slices"
 	"strconv"
@@ -679,5 +680,68 @@ func TestUnfold_IsLazy(t *testing.T) {
 	})
 	if calls != 0 {
 		t.Errorf("Unfold called step %d times before iteration, want 0", calls)
+	}
+}
+
+func TestFromSeq2(t *testing.T) {
+	got := FromSeq2(slices.All([]string{"a", "b", "c"})).Collect()
+	want := []adt.Pair[int, string]{adt.PairOf(0, "a"), adt.PairOf(1, "b"), adt.PairOf(2, "c")}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("FromSeq2(slices.All) = %v, want %v", got, want)
+	}
+}
+
+func TestFromSeq2_StopsSourceEarly(t *testing.T) {
+	pulled := 0
+	src := func(yield func(int, int) bool) {
+		for i := 0; ; i++ {
+			pulled++
+			if !yield(i, i*i) {
+				return
+			}
+		}
+	}
+	if got := FromSeq2(src).Take(2).Count(); got != 2 {
+		t.Fatalf("Take(2).Count() = %d, want 2", got)
+	}
+	if pulled != 2 {
+		t.Errorf("FromSeq2 pulled %d pairs for Take(2), want 2", pulled)
+	}
+}
+
+func TestToSeq2(t *testing.T) {
+	s := SeqOf(adt.PairOf("x", 1), adt.PairOf("y", 2))
+	var keys []string
+	var vals []int
+	for k, v := range ToSeq2(s) {
+		keys = append(keys, k)
+		vals = append(vals, v)
+	}
+	if want := []string{"x", "y"}; !reflect.DeepEqual(keys, want) {
+		t.Errorf("ToSeq2 keys = %v, want %v", keys, want)
+	}
+	if want := []int{1, 2}; !reflect.DeepEqual(vals, want) {
+		t.Errorf("ToSeq2 values = %v, want %v", vals, want)
+	}
+}
+
+func TestToSeq2_StopsWhenConsumerBreaks(t *testing.T) {
+	var keys []int
+	for k := range ToSeq2(FromSeq2(slices.All([]string{"a", "b", "c"}))) {
+		keys = append(keys, k)
+		if k == 1 {
+			break
+		}
+	}
+	if want := []int{0, 1}; !reflect.DeepEqual(keys, want) {
+		t.Errorf("ToSeq2 with break = %v, want %v", keys, want)
+	}
+}
+
+func TestSeq2_RoundTripThroughMap(t *testing.T) {
+	m := map[string]int{"a": 1, "b": 2}
+	got := maps.Collect(ToSeq2(FromSeq2(maps.All(m))))
+	if !reflect.DeepEqual(got, m) {
+		t.Errorf("round trip = %v, want %v", got, m)
 	}
 }
