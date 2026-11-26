@@ -96,18 +96,14 @@ found := stream.FromSeq(hugeGenerator).
 
 ## 2. Gatherers — Custom Stateful Intermediate Operations
 
-A `Gatherer[T, A, U]` is a reusable, named, custom intermediate operation — the sanctioned place for a stateful loop to live when nothing built-in fits (Java 24's `Gatherers` concept). `WindowFixed`, `WindowSliding`, `Scan`, and `Fold` below are pre-built `Gatherer` values; `MapWhile`/`ScanWhile` (the convenience methods documented above) are themselves implemented on top of the equivalent-named `Gatherer` here.
+A `Gatherer[T, A, U]` is a reusable, named, custom intermediate operation — the sanctioned place for a stateful loop to live when nothing built-in fits (Java 24's `Gatherers` concept). `WindowFixed`, `WindowSliding`, `Scan`, `Fold`, `ChunkBy`, `Dedup`/`DedupBy`, `Intersperse`, and `StepBy` below are pre-built `Gatherer` values; `MapWhile`/`ScanWhile` (the convenience methods documented above) are themselves implemented on top of the equivalent-named `Gatherer` here.
 
-```go
-type Gatherer[T, A, U any] struct {
-    Init      func() A
-    Integrate func(state A, item T, emit func(U)) (next A, cont bool)
-    Finish    func(state A, emit func(U)) // optional; nil means nothing to flush
-}
-```
+A `Gatherer` is built with `GathererOf(init, integrate)`, which has nothing to flush at the end; `Then(finish)` attaches a finisher for trailing state.
 
-| Method | Signature | Description |
+| Method / Function | Signature | Description |
 |---|---|---|
+| `GathererOf[T, A, U]` | `func GathererOf[T, A, U any](init func() A, integrate func(state A, item T, emit func(U)) (A, bool)) Gatherer[T, A, U]` | `integrate` processes one item, may emit zero or more outputs, and returns the next state plus whether to keep consuming. |
+| `g.Then(finish)` | `func (g Gatherer[T, A, U]) Then(finish func(state A, emit func(U))) Gatherer[T, A, U]` | Runs `finish` on the final state after `g`'s own finisher, also after an early stop. |
 | `s.Gather(g)` | `func (s Seq[T]) Gather[A, U any](g Gatherer[T, A, U]) Seq[U]` | Runs `g` over the sequence. |
 
 | Function | Signature | Description |
@@ -116,6 +112,11 @@ type Gatherer[T, A, U any] struct {
 | `WindowSliding[T]` | `func WindowSliding[T any](n int) Gatherer[T, []T, []T]` | Produces every overlapping window of size `n` — fewer than `n` elements at the very start are not emitted. Each window is a defensive copy. Panics if `n < 1`. |
 | `Scan[T, A]` | `func Scan[T, A any](initial A, fn func(A, T) A) Gatherer[T, A, A]` | Emits every intermediate accumulator value — a running `Reduce`, as opposed to `Reduce`'s single final value. Rust's `Iterator::scan`. |
 | `Fold[T, U]` | `func Fold[T, U any](initial U, fn func(U, T) U) Gatherer[T, U, U]` | `Reduce`'s non-terminal twin: the same final accumulator, emitted once at the end as a one-element `Seq` instead of returned as a bare value — so it keeps flowing into `FlatMap`/`Map`. |
+| `ChunkBy[T, K]` | `func ChunkBy[T any, K comparable](key func(T) K) Gatherer[T, adt.Pair[K, []T], []T]` | Groups consecutive elements sharing `key` into one slice each. Rust's `chunk_by`. |
+| `DedupBy[T, K]` | `func DedupBy[T any, K comparable](key func(T) K) Gatherer[T, adt.Option[K], T]` | Drops each element whose key equals the previous element's key, keeping the first of every run. |
+| `Dedup[T]` | `func Dedup[T comparable]() Gatherer[T, adt.Option[T], T]` | Drops each element equal to the previous one. `DedupBy(fn.Identity[T])`. |
+| `Intersperse[T]` | `func Intersperse[T any](sep T) Gatherer[T, bool, T]` | Places `sep` between every pair of elements. Rust's `intersperse`. |
+| `StepBy[T]` | `func StepBy[T any](n int) Gatherer[T, int, T]` | Keeps the first element and then every `n`th one. Rust's `step_by`. Panics if `n < 1`. |
 | `MapWhile[T, U]` | `func MapWhile[T, U any](fn func(T) adt.Option[U]) Gatherer[T, struct{}, U]` | The `Gatherer` behind `Seq.MapWhile` — use directly with `.Gather()` when composing it with other gatherers in one pass. |
 | `ScanWhile[T, A, U]` | `func ScanWhile[T, A, U any](initial A, fn func(A, T) (A, adt.Option[U])) Gatherer[T, A, U]` | The `Gatherer` behind `Seq.ScanWhile`. |
 
@@ -126,10 +127,16 @@ batches := stream.SeqOf(readings...).Gather(stream.WindowFixed[Reading](10)).Col
 // WindowSliding: every 3-element moving window, e.g. for a running average
 windows := stream.SeqOf(prices...).Gather(stream.WindowSliding[float64](3)).Collect()
 
+// WindowSliding then Map: moving average
+movingAverages := stream.SeqOf(temps...).Gather(stream.WindowSliding[float64](3)).Map(average).Collect()
+
 // Scan: running total emitted at every step, not just the final one
-runningTotals := stream.SeqOf(amounts...).Gather(stream.Scan(0.0, func(acc, v float64) float64 {
+runningBalance := stream.SeqOf(transactions...).Gather(stream.Scan(0, func(acc, v int) int {
     return acc + v
 })).Collect()
+
+// GathererOf + Then: custom batches, with the trailing partial batch flushed
+batches := stream.SeqOf(rows...).Gather(stream.GathererOf(newBatch, addToBatch).Then(flushBatch)).Collect()
 ```
 
 ---
