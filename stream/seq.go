@@ -11,6 +11,7 @@ import (
 	"cmp"
 	"iter"
 	"slices"
+	"strings"
 
 	"github.com/azuiktech/kleisli-go/adt"
 	"github.com/azuiktech/kleisli-go/fn"
@@ -420,15 +421,33 @@ func (s Seq[T]) MinByCompare(less func(a, b T) int) adt.Option[T] {
 // Use KeepFirst, KeepLast, or a custom combine function as merge.
 func (s Seq[T]) ToMapBy[K comparable, V any](fn func(T) (K, V), merge func(existing, incoming V) V) map[K]V {
 	out := map[K]V{}
-	for v := range s.seq {
-		k, val := fn(v)
-		if existing, ok := out[k]; ok {
-			out[k] = merge(existing, val)
-		} else {
-			out[k] = val
-		}
-	}
+	s.MergeInto(out, fn, merge)
 	return out
+}
+
+// MergeInto writes each (key, value) fn extracts into dst, calling merge
+// when the key is already present.
+func (s Seq[T]) MergeInto[K comparable, V any](dst map[K]V, fn func(T) (K, V), merge func(existing, incoming V) V) {
+	s.ForEach(func(v T) {
+		k, val := fn(v)
+		existing, found := dst[k]
+		dst[k] = adt.FromOk(existing, found).Map(func(e V) V { return merge(e, val) }).OrElse(val)
+	})
+}
+
+// AppendTo appends every element to dst and returns the extended slice.
+func (s Seq[T]) AppendTo(dst []T) []T { return slices.AppendSeq(dst, s.seq) }
+
+// Join concatenates the elements, placing sep between each pair.
+func Join[S ~string](s Seq[S], sep string) string {
+	var b strings.Builder
+	prefix := ""
+	s.ForEach(func(v S) {
+		b.WriteString(prefix)
+		b.WriteString(string(v))
+		prefix = sep
+	})
+	return b.String()
 }
 
 // Count consumes s and returns the number of elements.
@@ -451,14 +470,67 @@ func (s Seq[T]) Nth(n int) adt.Option[T] {
 	})
 }
 
-// GroupBy consumes s and buckets its elements by fn's key, preserving
-// order within each bucket.
-func (s Seq[T]) GroupBy[K comparable](fn func(T) K) map[K][]T {
-	return s.Reduce(map[K][]T{}, func(groups map[K][]T, v T) map[K][]T {
-		k := fn(v)
-		groups[k] = append(groups[k], v)
+// Collector builds one result from a run of elements: new makes a fresh
+// container, add puts one element into it, finish turns the container
+// into the result.
+type Collector[T, A, R any] struct {
+	new    func() A
+	add    func(A, T) A
+	finish func(A) R
+}
+
+// CollectorOf builds a Collector whose result is the container itself.
+func CollectorOf[T, A any](new func() A, add func(A, T) A) Collector[T, A, A] {
+	return Collector[T, A, A]{new: new, add: add, finish: fn.Identity[A]}
+}
+
+// Then returns c with fn applied to its result.
+func (c Collector[T, A, R]) Then[S any](fn func(R) S) Collector[T, A, S] {
+	return Collector[T, A, S]{new: c.new, add: c.add, finish: func(a A) S { return fn(c.finish(a)) }}
+}
+
+// Appending collects elements by appending each to a slice, in order.
+func Appending[T any]() Collector[T, []T, []T] {
+	return CollectorOf(func() []T { return []T{} }, func(group []T, v T) []T { return append(group, v) })
+}
+
+// Counting counts elements.
+func Counting[T any]() Collector[T, int, int] {
+	return CollectorOf(func() int { return 0 }, func(n int, _ T) int { return n + 1 })
+}
+
+// GroupByWith consumes s, collects each key's elements, in order, into a
+// fresh container from c, and finishes each container into its result.
+func (s Seq[T]) GroupByWith[K comparable, A, R any](key func(T) K, c Collector[T, A, R]) map[K]R {
+	groups := s.Reduce(map[K]A{}, func(groups map[K]A, v T) map[K]A {
+		k := key(v)
+		acc, found := groups[k]
+		groups[k] = c.add(adt.FromOk(acc, found).OrElseGet(c.new), v)
 		return groups
 	})
+	return finishEach(groups, c.finish)
+}
+
+// finishEach maps every value of groups through finish. A plain range,
+// not a Seq: a Seq over groups here is an instantiation cycle, since A
+// may itself be built from T.
+func finishEach[K comparable, A, R any](groups map[K]A, finish func(A) R) map[K]R {
+	out := make(map[K]R, len(groups))
+	for k, acc := range groups {
+		out[k] = finish(acc)
+	}
+	return out
+}
+
+// GroupBy consumes s and buckets its elements by key, preserving order
+// within each bucket.
+func (s Seq[T]) GroupBy[K comparable](key func(T) K) map[K][]T {
+	return s.GroupByWith(key, Appending[T]())
+}
+
+// CountBy consumes s and counts its elements per key.
+func (s Seq[T]) CountBy[K comparable](key func(T) K) map[K]int {
+	return s.GroupByWith(key, Counting[T]())
 }
 
 // Partition consumes s and splits it into the elements matching fn and

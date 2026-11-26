@@ -735,3 +735,113 @@ func TestWindowSliding_PanicsOnZero(t *testing.T) {
 	}()
 	WindowSliding[int](0)
 }
+
+func TestSeq_GroupByWith_CustomCollector(t *testing.T) {
+	sum := CollectorOf(
+		func() int { return 10 },
+		func(acc int, s string) int { return acc + int(s[1]-'0') })
+	got := SeqOf("a1", "b2", "a3").GroupByWith(func(s string) byte { return s[0] }, sum)
+	if want := map[byte]int{'a': 14, 'b': 12}; !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupByWith = %v, want %v", got, want)
+	}
+}
+
+func TestSeq_GroupByWith_NewContainerPerKey(t *testing.T) {
+	presized := CollectorOf(
+		func() []int { return make([]int, 0, 8) },
+		func(group []int, n int) []int { return append(group, n) })
+	got := SeqOf(1, 2, 3).GroupByWith(func(n int) int { return n }, presized)
+	if want := map[int][]int{1: {1}, 2: {2}, 3: {3}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupByWith = %v, want %v", got, want)
+	}
+}
+
+func TestSeq_GroupByWith_Empty(t *testing.T) {
+	got := EmptySeq[int]().GroupByWith(func(n int) int { return n }, Counting[int]())
+	if len(got) != 0 {
+		t.Errorf("GroupByWith on empty = %v, want empty map", got)
+	}
+}
+
+func TestSeq_GroupByWith_AppendingAndCounting(t *testing.T) {
+	key := func(s string) byte { return s[0] }
+	groups := SeqOf("a1", "b2", "a3").GroupByWith(key, Appending[string]())
+	if want := map[byte][]string{'a': {"a1", "a3"}, 'b': {"b2"}}; !reflect.DeepEqual(groups, want) {
+		t.Errorf("Appending = %v, want %v", groups, want)
+	}
+	counts := SeqOf("a1", "b2", "a3").GroupByWith(key, Counting[string]())
+	if want := map[byte]int{'a': 2, 'b': 1}; !reflect.DeepEqual(counts, want) {
+		t.Errorf("Counting = %v, want %v", counts, want)
+	}
+}
+
+func TestCollector_Then_FinishesEachGroup(t *testing.T) {
+	got := SeqOf("a1", "b2", "a3").GroupByWith(
+		func(s string) byte { return s[0] },
+		Counting[string]().Then(strconv.Itoa))
+	if want := map[byte]string{'a': "2", 'b': "1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Counting().Then(Itoa) = %v, want %v", got, want)
+	}
+}
+
+func TestCollector_Then_Chains(t *testing.T) {
+	got := SeqOf(1, 2, 3).GroupByWith(
+		func(int) string { return "all" },
+		Counting[int]().Then(func(n int) int { return n * 10 }).Then(strconv.Itoa))
+	if want := map[string]string{"all": "30"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Then.Then = %v, want %v", got, want)
+	}
+}
+
+func TestSeq_GroupBy_KeepsOrderAndSeparateArrays(t *testing.T) {
+	got := SeqOf(1, 2, 3, 4, 5).GroupBy(func(n int) bool { return n%2 == 0 })
+	if want := map[bool][]int{true: {2, 4}, false: {1, 3, 5}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("GroupBy = %v, want %v", got, want)
+	}
+	got[true][0] = 99
+	if got[false][0] != 1 {
+		t.Error("GroupBy groups share a backing array")
+	}
+}
+
+func TestSeq_CountBy(t *testing.T) {
+	got := SeqOf("apple", "avocado", "banana").CountBy(func(s string) byte { return s[0] })
+	if want := map[byte]int{'a': 2, 'b': 1}; !reflect.DeepEqual(got, want) {
+		t.Errorf("CountBy = %v, want %v", got, want)
+	}
+}
+
+type label string
+
+func TestJoin(t *testing.T) {
+	if got := Join(SeqOf("a", "b", "c"), ","); got != "a,b,c" {
+		t.Errorf(`Join = %q, want "a,b,c"`, got)
+	}
+	if got := Join(SeqOf[label]("x", "y"), "-"); got != "x-y" {
+		t.Errorf(`Join(~string) = %q, want "x-y"`, got)
+	}
+	if got := Join(EmptySeq[string](), ","); got != "" {
+		t.Errorf(`Join(empty) = %q, want ""`, got)
+	}
+}
+
+func TestSeq_AppendTo(t *testing.T) {
+	dst := make([]int, 1, 4)
+	got := SeqOf(2, 3).AppendTo(dst)
+	if want := []int{0, 2, 3}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("AppendTo = %v, want %v", got, want)
+	}
+	if &got[0] != &dst[0] {
+		t.Error("AppendTo reallocated although dst had capacity")
+	}
+}
+
+func TestSeq_MergeInto(t *testing.T) {
+	dst := map[string]int{"a": 1, "keep": 7}
+	SeqOf("a", "b", "a").MergeInto(dst,
+		func(s string) (string, int) { return s, 10 },
+		func(existing, incoming int) int { return existing + incoming })
+	if want := map[string]int{"a": 21, "b": 10, "keep": 7}; !reflect.DeepEqual(dst, want) {
+		t.Errorf("MergeInto dst = %v, want %v", dst, want)
+	}
+}

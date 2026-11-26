@@ -58,16 +58,25 @@ import "github.com/azuiktech/kleisli-go/stream"
 | `ScanWhile[A, U](init, fn)` | `func (s Seq[T]) ScanWhile[A, U any](initial A, fn func(A, T) (A, adt.Option[U])) Seq[U]` | A stateful `MapWhile` that accumulates state, stopping on `None`. |
 | `Collect()` | `func (s Seq[T]) Collect() []T` | Materializes lazy sequence into slice. |
 | `ToMapBy[K, V](fn, merge)`| `func (s Seq[T]) ToMapBy[K comparable, V any](fn func(T) (K, V), merge func(existing, incoming V) V) map[K]V` | Builds a `map[K]V` with explicit collision handling via `merge`. Use `stream.KeepFirst`, `stream.KeepLast`, or a custom combiner. |
+| `MergeInto[K, V](dst, fn, merge)` | `func (s Seq[T]) MergeInto[K comparable, V any](dst map[K]V, fn func(T) (K, V), merge func(existing, incoming V) V)` | Writes into an existing map in place, calling `merge` on a key collision. |
+| `AppendTo(dst)` | `func (s Seq[T]) AppendTo(dst []T) []T` | Appends every element to `dst` and returns the extended slice. |
 | `Count()` | `func (s Seq[T]) Count() int` | Number of elements, draining the `Seq`. |
 | `Last(fn)` | `func (s Seq[T]) Last(fn func(T) bool) adt.Option[T]` | Last element satisfying `fn`, draining the `Seq`. |
 | `Nth(n)` | `func (s Seq[T]) Nth(n int) adt.Option[T]` | Element at 0-based position `n`, or `None`. |
-| `GroupBy[K](fn)` | `func (s Seq[T]) GroupBy[K comparable](fn func(T) K) map[K][]T` | Buckets elements into a map of slices by key `K`. |
+| `GroupByWith[K, A, R](key, c)` | `func (s Seq[T]) GroupByWith[K comparable, A, R any](key func(T) K, c Collector[T, A, R]) map[K]R` | Collects each key's elements, in order, into a fresh container from `c`, then finishes each into its result. |
+| `GroupBy[K](key)` | `func (s Seq[T]) GroupBy[K comparable](key func(T) K) map[K][]T` | `GroupByWith(key, Appending[T]())`. |
+| `CountBy[K](key)` | `func (s Seq[T]) CountBy[K comparable](key func(T) K) map[K]int` | `GroupByWith(key, Counting[T]())`. |
 | `Partition(fn)` | `func (s Seq[T]) Partition(fn func(T) bool) (matched, unmatched []T)` | Splits elements into `(matches, nonMatches)`. |
 
 ### Seq Free Functions
 
 | Function | Signature | Description |
 |---|---|---|
+| `Join[S]` | `func Join[S ~string](s Seq[S], sep string) string` | Concatenates the elements with `sep` between each pair. |
+| `Appending[T]` | `func Appending[T any]() Collector[T, []T, []T]` | `Collector` appending elements to a slice. |
+| `Counting[T]` | `func Counting[T any]() Collector[T, int, int]` | `Collector` counting elements. |
+| `CollectorOf[T, A]` | `func CollectorOf[T, A any](new func() A, add func(A, T) A) Collector[T, A, A]` | `Collector` from a fresh-container func and an add func; the result is the container. |
+| `Collector.Then[S]` | `func (c Collector[T, A, R]) Then[S any](fn func(R) S) Collector[T, A, S]` | `c` with `fn` applied to its result, e.g. `Counting[T]().Then(strconv.Itoa)`. |
 | `DistinctSeq[T]` | `func DistinctSeq[T comparable](s Seq[T]) Seq[T]` | Deduplicates items lazily with an internal set. |
 | `FlattenSeq[T]` | `func FlattenSeq[T any](s Seq[[]T]) Seq[T]` | Collapses a `Seq[[]T]` into a `Seq[T]`, yielding each inner slice's elements in order. |
 | `ZipSeq[A, B]` | `func ZipSeq[A, B any](sa Seq[A], sb Seq[B]) Seq[adt.Pair[A, B]]` | Pairs two lazy sequences positionally, stopping at the shorter one, using `iter.Pull`. |
