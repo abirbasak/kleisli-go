@@ -735,3 +735,72 @@ func TestWindowSliding_PanicsOnZero(t *testing.T) {
 	}()
 	WindowSliding[int](0)
 }
+
+func TestSeq_GroupByWith_FoldsEachKeyFromInitial(t *testing.T) {
+	got := SeqOf("a1", "b2", "a3").GroupByWith(
+		func(s string) byte { return s[0] }, 10,
+		func(sum int, s string) int { return sum + int(s[1]-'0') })
+	if want := map[byte]int{'a': 14, 'b': 12}; !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupByWith = %v, want %v", got, want)
+	}
+}
+
+func TestSeq_GroupByWith_Empty(t *testing.T) {
+	got := EmptySeq[int]().GroupByWith(func(n int) int { return n }, 0, func(a, n int) int { return a + n })
+	if len(got) != 0 {
+		t.Errorf("GroupByWith on empty = %v, want empty map", got)
+	}
+}
+
+func TestSeq_GroupBy_KeepsOrderAndSeparateArrays(t *testing.T) {
+	got := SeqOf(1, 2, 3, 4, 5).GroupBy(func(n int) bool { return n%2 == 0 })
+	if want := map[bool][]int{true: {2, 4}, false: {1, 3, 5}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("GroupBy = %v, want %v", got, want)
+	}
+	got[true][0] = 99
+	if got[false][0] != 1 {
+		t.Error("GroupBy groups share a backing array")
+	}
+}
+
+func TestSeq_CountBy(t *testing.T) {
+	got := SeqOf("apple", "avocado", "banana").CountBy(func(s string) byte { return s[0] })
+	if want := map[byte]int{'a': 2, 'b': 1}; !reflect.DeepEqual(got, want) {
+		t.Errorf("CountBy = %v, want %v", got, want)
+	}
+}
+
+type label string
+
+func TestJoin(t *testing.T) {
+	if got := Join(SeqOf("a", "b", "c"), ","); got != "a,b,c" {
+		t.Errorf(`Join = %q, want "a,b,c"`, got)
+	}
+	if got := Join(SeqOf[label]("x", "y"), "-"); got != "x-y" {
+		t.Errorf(`Join(~string) = %q, want "x-y"`, got)
+	}
+	if got := Join(EmptySeq[string](), ","); got != "" {
+		t.Errorf(`Join(empty) = %q, want ""`, got)
+	}
+}
+
+func TestSeq_AppendTo(t *testing.T) {
+	dst := make([]int, 1, 4)
+	got := SeqOf(2, 3).AppendTo(dst)
+	if want := []int{0, 2, 3}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("AppendTo = %v, want %v", got, want)
+	}
+	if &got[0] != &dst[0] {
+		t.Error("AppendTo reallocated although dst had capacity")
+	}
+}
+
+func TestSeq_MergeInto(t *testing.T) {
+	dst := map[string]int{"a": 1, "keep": 7}
+	SeqOf("a", "b", "a").MergeInto(dst,
+		func(s string) (string, int) { return s, 10 },
+		func(existing, incoming int) int { return existing + incoming })
+	if want := map[string]int{"a": 21, "b": 10, "keep": 7}; !reflect.DeepEqual(dst, want) {
+		t.Errorf("MergeInto dst = %v, want %v", dst, want)
+	}
+}
