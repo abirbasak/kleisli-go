@@ -320,6 +320,137 @@ func TestSeq_Gather_ScanWindowFold(t *testing.T) {
 	}
 }
 
+func batchOf(n int) Gatherer[int, []int, []int] {
+	return GathererOf(
+		func() []int { return []int{} },
+		func(batch []int, v int, emit func([]int)) ([]int, bool) {
+			batch = append(batch, v)
+			if len(batch) < n {
+				return batch, true
+			}
+			emit(batch)
+			return []int{}, true
+		})
+}
+
+func flushBatch(batch []int, emit func([]int)) {
+	if len(batch) > 0 {
+		emit(batch)
+	}
+}
+
+func TestGathererOf_NoFinisherDropsTrailingState(t *testing.T) {
+	got := SeqOf(1, 2, 3, 4, 5).Gather(batchOf(2)).Collect()
+	if want := [][]int{{1, 2}, {3, 4}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("GathererOf = %v, want %v", got, want)
+	}
+}
+
+func TestGatherer_Then_FlushesTrailingState(t *testing.T) {
+	got := SeqOf(1, 2, 3, 4, 5).Gather(batchOf(2).Then(flushBatch)).Collect()
+	if want := [][]int{{1, 2}, {3, 4}, {5}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("GathererOf.Then = %v, want %v", got, want)
+	}
+}
+
+func TestGatherer_Then_RunsAfterExistingFinisher(t *testing.T) {
+	marker := func(tag int) func([]int, func([]int)) {
+		return func(_ []int, emit func([]int)) { emit([]int{tag}) }
+	}
+	got := SeqOf(1, 2, 3).Gather(WindowFixed[int](2).Then(marker(-1)).Then(marker(-2))).Collect()
+	if want := [][]int{{1, 2}, {3}, {-1}, {-2}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("WindowFixed.Then.Then = %v, want %v", got, want)
+	}
+}
+
+func TestGatherer_Then_RunsAfterEarlyStop(t *testing.T) {
+	upToThree := GathererOf(
+		func() int { return 0 },
+		func(sum, v int, emit func(int)) (int, bool) { return sum + v, v < 3 }).
+		Then(func(sum int, emit func(int)) { emit(sum) })
+	if got := SeqOf(1, 2, 3, 4).Gather(upToThree).Collect(); !reflect.DeepEqual(got, []int{6}) {
+		t.Errorf("early stop then finish = %v, want [6]", got)
+	}
+}
+
+func TestGather_RunningBalanceAndMovingAverage(t *testing.T) {
+	balance := SeqOf(10, 20, -5).Gather(Scan(0, func(acc, v int) int { return acc + v })).Collect()
+	if want := []int{10, 30, 25}; !reflect.DeepEqual(balance, want) {
+		t.Errorf("running balance = %v, want %v", balance, want)
+	}
+	average := func(w []float64) float64 {
+		return SeqOf(w...).Reduce(0.0, func(a, v float64) float64 { return a + v }) / float64(len(w))
+	}
+	moving := SeqOf(1.0, 2.0, 3.0, 4.0).Gather(WindowSliding[float64](3)).Map(average).Collect()
+	if want := []float64{2, 3}; !reflect.DeepEqual(moving, want) {
+		t.Errorf("moving average = %v, want %v", moving, want)
+	}
+}
+
+func TestChunkBy(t *testing.T) {
+	got := SeqOf(1, 1, 2, 3, 3).Gather(ChunkBy(func(n int) int { return n })).Collect()
+	if want := [][]int{{1, 1}, {2}, {3, 3}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("ChunkBy = %v, want %v", got, want)
+	}
+	if got := EmptySeq[int]().Gather(ChunkBy(func(n int) int { return n })).Collect(); len(got) != 0 {
+		t.Errorf("ChunkBy on empty = %v, want empty", got)
+	}
+	zeroKey := SeqOf(0, 0, 1).Gather(ChunkBy(func(n int) int { return n })).Collect()
+	if want := [][]int{{0, 0}, {1}}; !reflect.DeepEqual(zeroKey, want) {
+		t.Errorf("ChunkBy with zero key = %v, want %v", zeroKey, want)
+	}
+}
+
+func TestDedup(t *testing.T) {
+	got := SeqOf(1, 1, 2, 1, 1).Gather(Dedup[int]()).Collect()
+	if want := []int{1, 2, 1}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Dedup = %v, want %v", got, want)
+	}
+	zeroFirst := SeqOf(0, 0, 1).Gather(Dedup[int]()).Collect()
+	if want := []int{0, 1}; !reflect.DeepEqual(zeroFirst, want) {
+		t.Errorf("Dedup with zero first = %v, want %v", zeroFirst, want)
+	}
+}
+
+func TestDedupBy_KeepsFirstOfEachRun(t *testing.T) {
+	got := SeqOf("a1", "a2", "b1", "a3").Gather(DedupBy(func(s string) byte { return s[0] })).Collect()
+	if want := []string{"a1", "b1", "a3"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("DedupBy = %v, want %v", got, want)
+	}
+}
+
+func TestIntersperse(t *testing.T) {
+	got := SeqOf("a", "b", "c").Gather(Intersperse(",")).Collect()
+	if want := []string{"a", ",", "b", ",", "c"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Intersperse = %v, want %v", got, want)
+	}
+	if got := SeqOf("a").Gather(Intersperse(",")).Collect(); !reflect.DeepEqual(got, []string{"a"}) {
+		t.Errorf("Intersperse single = %v, want [a]", got)
+	}
+	if got := EmptySeq[string]().Gather(Intersperse(",")).Collect(); len(got) != 0 {
+		t.Errorf("Intersperse empty = %v, want empty", got)
+	}
+}
+
+func TestStepBy(t *testing.T) {
+	got := SeqOf(0, 1, 2, 3, 4, 5).Gather(StepBy[int](2)).Collect()
+	if want := []int{0, 2, 4}; !reflect.DeepEqual(got, want) {
+		t.Errorf("StepBy(2) = %v, want %v", got, want)
+	}
+	if got := SeqOf(1, 2, 3).Gather(StepBy[int](1)).Collect(); !reflect.DeepEqual(got, []int{1, 2, 3}) {
+		t.Errorf("StepBy(1) = %v, want [1 2 3]", got)
+	}
+}
+
+func TestStepBy_PanicsOnZero(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("StepBy(0) did not panic")
+		}
+	}()
+	StepBy[int](0)
+}
+
 func TestOption_All(t *testing.T) {
 	if got := FromSeq(adt.Some(7).All()).Collect(); !reflect.DeepEqual(got, []int{7}) {
 		t.Errorf("FromSeq(Some.All()) = %v, want [7]", got)

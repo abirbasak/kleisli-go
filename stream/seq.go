@@ -293,7 +293,7 @@ func (s Seq[T]) Collect() []T { return slices.Collect(s.seq) }
 // goes rather than building one output slice.
 func gatherSeq[T, A, U any](seq iter.Seq[T], g Gatherer[T, A, U]) iter.Seq[U] {
 	return func(yield func(U) bool) {
-		state := g.Init()
+		state := g.init()
 		stopped := false
 		emit := func(u U) {
 			if stopped {
@@ -307,14 +307,14 @@ func gatherSeq[T, A, U any](seq iter.Seq[T], g Gatherer[T, A, U]) iter.Seq[U] {
 			if stopped {
 				return
 			}
-			next, cont := g.Integrate(state, v, emit)
+			next, cont := g.integrate(state, v, emit)
 			state = next
 			if !cont {
 				break
 			}
 		}
-		if !stopped && g.Finish != nil {
-			g.Finish(state, emit)
+		if !stopped {
+			g.finish(state, emit)
 		}
 	}
 }
