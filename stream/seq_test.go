@@ -736,19 +736,44 @@ func TestWindowSliding_PanicsOnZero(t *testing.T) {
 	WindowSliding[int](0)
 }
 
-func TestSeq_GroupByWith_FoldsEachKeyFromInitial(t *testing.T) {
-	got := SeqOf("a1", "b2", "a3").GroupByWith(
-		func(s string) byte { return s[0] }, 10,
-		func(sum int, s string) int { return sum + int(s[1]-'0') })
+func TestSeq_GroupByWith_CustomCollector(t *testing.T) {
+	sum := Collector[string, int]{
+		New: func() int { return 10 },
+		Add: func(acc int, s string) int { return acc + int(s[1]-'0') },
+	}
+	got := SeqOf("a1", "b2", "a3").GroupByWith(func(s string) byte { return s[0] }, sum)
 	if want := map[byte]int{'a': 14, 'b': 12}; !reflect.DeepEqual(got, want) {
 		t.Errorf("GroupByWith = %v, want %v", got, want)
 	}
 }
 
+func TestSeq_GroupByWith_NewContainerPerKey(t *testing.T) {
+	presized := Collector[int, []int]{
+		New: func() []int { return make([]int, 0, 8) },
+		Add: func(group []int, n int) []int { return append(group, n) },
+	}
+	got := SeqOf(1, 2, 3).GroupByWith(func(n int) int { return n }, presized)
+	if want := map[int][]int{1: {1}, 2: {2}, 3: {3}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupByWith = %v, want %v", got, want)
+	}
+}
+
 func TestSeq_GroupByWith_Empty(t *testing.T) {
-	got := EmptySeq[int]().GroupByWith(func(n int) int { return n }, 0, func(a, n int) int { return a + n })
+	got := EmptySeq[int]().GroupByWith(func(n int) int { return n }, Counting[int]())
 	if len(got) != 0 {
 		t.Errorf("GroupByWith on empty = %v, want empty map", got)
+	}
+}
+
+func TestSeq_GroupByWith_ToSliceAndCounting(t *testing.T) {
+	key := func(s string) byte { return s[0] }
+	groups := SeqOf("a1", "b2", "a3").GroupByWith(key, ToSlice[string]())
+	if want := map[byte][]string{'a': {"a1", "a3"}, 'b': {"b2"}}; !reflect.DeepEqual(groups, want) {
+		t.Errorf("ToSlice = %v, want %v", groups, want)
+	}
+	counts := SeqOf("a1", "b2", "a3").GroupByWith(key, Counting[string]())
+	if want := map[byte]int{'a': 2, 'b': 1}; !reflect.DeepEqual(counts, want) {
+		t.Errorf("Counting = %v, want %v", counts, want)
 	}
 }
 

@@ -63,9 +63,9 @@ import "github.com/azuiktech/kleisli-go/stream"
 | `Count()` | `func (s Seq[T]) Count() int` | Number of elements, draining the `Seq`. |
 | `Last(fn)` | `func (s Seq[T]) Last(fn func(T) bool) adt.Option[T]` | Last element satisfying `fn`, draining the `Seq`. |
 | `Nth(n)` | `func (s Seq[T]) Nth(n int) adt.Option[T]` | Element at 0-based position `n`, or `None`. |
-| `GroupByWith[K, A](key, init, fn)` | `func (s Seq[T]) GroupByWith[K comparable, A any](key func(T) K, initial A, fn func(A, T) A) map[K]A` | Folds each key's elements, in order, from `initial` with `fn`. |
-| `GroupBy[K](key)` | `func (s Seq[T]) GroupBy[K comparable](key func(T) K) map[K][]T` | Buckets elements into a map of slices by key `K`. `GroupByWith` collecting into a slice. |
-| `CountBy[K](key)` | `func (s Seq[T]) CountBy[K comparable](key func(T) K) map[K]int` | Counts elements per key. `GroupByWith` counting. |
+| `GroupByWith[K, A](key, c)` | `func (s Seq[T]) GroupByWith[K comparable, A any](key func(T) K, c Collector[T, A]) map[K]A` | Collects each key's elements, in order, into a fresh container from `c.New` via `c.Add`. |
+| `GroupBy[K](key)` | `func (s Seq[T]) GroupBy[K comparable](key func(T) K) map[K][]T` | `GroupByWith(key, ToSlice[T]())`. |
+| `CountBy[K](key)` | `func (s Seq[T]) CountBy[K comparable](key func(T) K) map[K]int` | `GroupByWith(key, Counting[T]())`. |
 | `Partition(fn)` | `func (s Seq[T]) Partition(fn func(T) bool) (matched, unmatched []T)` | Splits elements into `(matches, nonMatches)`. |
 
 ### Seq Free Functions
@@ -73,6 +73,8 @@ import "github.com/azuiktech/kleisli-go/stream"
 | Function | Signature | Description |
 |---|---|---|
 | `Join[S]` | `func Join[S ~string](s Seq[S], sep string) string` | Concatenates the elements with `sep` between each pair. |
+| `ToSlice[T]` | `func ToSlice[T any]() Collector[T, []T]` | `Collector` appending elements to a slice. |
+| `Counting[T]` | `func Counting[T any]() Collector[T, int]` | `Collector` counting elements. |
 | `DistinctSeq[T]` | `func DistinctSeq[T comparable](s Seq[T]) Seq[T]` | Deduplicates items lazily with an internal set. |
 | `FlattenSeq[T]` | `func FlattenSeq[T any](s Seq[[]T]) Seq[T]` | Collapses a `Seq[[]T]` into a `Seq[T]`, yielding each inner slice's elements in order. |
 | `ZipSeq[A, B]` | `func ZipSeq[A, B any](sa Seq[A], sb Seq[B]) Seq[adt.Pair[A, B]]` | Pairs two lazy sequences positionally, stopping at the shorter one, using `iter.Pull`. |

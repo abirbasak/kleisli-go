@@ -470,13 +470,36 @@ func (s Seq[T]) Nth(n int) adt.Option[T] {
 	})
 }
 
-// GroupByWith consumes s and folds each key's elements, in order, from
-// initial with fn.
-func (s Seq[T]) GroupByWith[K comparable, A any](key func(T) K, initial A, fn func(A, T) A) map[K]A {
+// Collector builds one container from a run of elements: New makes a
+// fresh container, Add puts one element into it.
+type Collector[T, A any] struct {
+	New func() A
+	Add func(A, T) A
+}
+
+// ToSlice collects elements into a slice, in order.
+func ToSlice[T any]() Collector[T, []T] {
+	return Collector[T, []T]{
+		New: func() []T { return []T{} },
+		Add: func(group []T, v T) []T { return append(group, v) },
+	}
+}
+
+// Counting counts elements.
+func Counting[T any]() Collector[T, int] {
+	return Collector[T, int]{
+		New: func() int { return 0 },
+		Add: func(n int, _ T) int { return n + 1 },
+	}
+}
+
+// GroupByWith consumes s and collects each key's elements, in order, into
+// a fresh container from c.
+func (s Seq[T]) GroupByWith[K comparable, A any](key func(T) K, c Collector[T, A]) map[K]A {
 	return s.Reduce(map[K]A{}, func(groups map[K]A, v T) map[K]A {
 		k := key(v)
 		acc, found := groups[k]
-		groups[k] = fn(adt.FromOk(acc, found).OrElse(initial), v)
+		groups[k] = c.Add(adt.FromOk(acc, found).OrElseGet(c.New), v)
 		return groups
 	})
 }
@@ -484,12 +507,12 @@ func (s Seq[T]) GroupByWith[K comparable, A any](key func(T) K, initial A, fn fu
 // GroupBy consumes s and buckets its elements by key, preserving order
 // within each bucket.
 func (s Seq[T]) GroupBy[K comparable](key func(T) K) map[K][]T {
-	return s.GroupByWith(key, []T{}, func(group []T, v T) []T { return append(group, v) })
+	return s.GroupByWith(key, ToSlice[T]())
 }
 
 // CountBy consumes s and counts its elements per key.
 func (s Seq[T]) CountBy[K comparable](key func(T) K) map[K]int {
-	return s.GroupByWith(key, 0, func(n int, _ T) int { return n + 1 })
+	return s.GroupByWith(key, Counting[T]())
 }
 
 // Partition consumes s and splits it into the elements matching fn and
