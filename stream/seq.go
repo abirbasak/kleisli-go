@@ -477,8 +477,8 @@ type Collector[T, A any] struct {
 	Add func(A, T) A
 }
 
-// ToSlice collects elements into a slice, in order.
-func ToSlice[T any]() Collector[T, []T] {
+// Appending collects elements by appending each to a slice, in order.
+func Appending[T any]() Collector[T, []T] {
 	return Collector[T, []T]{
 		New: func() []T { return []T{} },
 		Add: func(group []T, v T) []T { return append(group, v) },
@@ -507,7 +507,7 @@ func (s Seq[T]) GroupByWith[K comparable, A any](key func(T) K, c Collector[T, A
 // GroupBy consumes s and buckets its elements by key, preserving order
 // within each bucket.
 func (s Seq[T]) GroupBy[K comparable](key func(T) K) map[K][]T {
-	return s.GroupByWith(key, ToSlice[T]())
+	return s.GroupByWith(key, Appending[T]())
 }
 
 // CountBy consumes s and counts its elements per key.

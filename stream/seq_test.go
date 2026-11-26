@@ -765,11 +765,11 @@ func TestSeq_GroupByWith_Empty(t *testing.T) {
 	}
 }
 
-func TestSeq_GroupByWith_ToSliceAndCounting(t *testing.T) {
+func TestSeq_GroupByWith_AppendingAndCounting(t *testing.T) {
 	key := func(s string) byte { return s[0] }
-	groups := SeqOf("a1", "b2", "a3").GroupByWith(key, ToSlice[string]())
+	groups := SeqOf("a1", "b2", "a3").GroupByWith(key, Appending[string]())
 	if want := map[byte][]string{'a': {"a1", "a3"}, 'b': {"b2"}}; !reflect.DeepEqual(groups, want) {
-		t.Errorf("ToSlice = %v, want %v", groups, want)
+		t.Errorf("Appending = %v, want %v", groups, want)
 	}
 	counts := SeqOf("a1", "b2", "a3").GroupByWith(key, Counting[string]())
 	if want := map[byte]int{'a': 2, 'b': 1}; !reflect.DeepEqual(counts, want) {
