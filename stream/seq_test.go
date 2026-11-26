@@ -737,10 +737,9 @@ func TestWindowSliding_PanicsOnZero(t *testing.T) {
 }
 
 func TestSeq_GroupByWith_CustomCollector(t *testing.T) {
-	sum := Collector[string, int]{
-		New: func() int { return 10 },
-		Add: func(acc int, s string) int { return acc + int(s[1]-'0') },
-	}
+	sum := CollectorOf(
+		func() int { return 10 },
+		func(acc int, s string) int { return acc + int(s[1]-'0') })
 	got := SeqOf("a1", "b2", "a3").GroupByWith(func(s string) byte { return s[0] }, sum)
 	if want := map[byte]int{'a': 14, 'b': 12}; !reflect.DeepEqual(got, want) {
 		t.Errorf("GroupByWith = %v, want %v", got, want)
@@ -748,10 +747,9 @@ func TestSeq_GroupByWith_CustomCollector(t *testing.T) {
 }
 
 func TestSeq_GroupByWith_NewContainerPerKey(t *testing.T) {
-	presized := Collector[int, []int]{
-		New: func() []int { return make([]int, 0, 8) },
-		Add: func(group []int, n int) []int { return append(group, n) },
-	}
+	presized := CollectorOf(
+		func() []int { return make([]int, 0, 8) },
+		func(group []int, n int) []int { return append(group, n) })
 	got := SeqOf(1, 2, 3).GroupByWith(func(n int) int { return n }, presized)
 	if want := map[int][]int{1: {1}, 2: {2}, 3: {3}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("GroupByWith = %v, want %v", got, want)
@@ -774,6 +772,24 @@ func TestSeq_GroupByWith_AppendingAndCounting(t *testing.T) {
 	counts := SeqOf("a1", "b2", "a3").GroupByWith(key, Counting[string]())
 	if want := map[byte]int{'a': 2, 'b': 1}; !reflect.DeepEqual(counts, want) {
 		t.Errorf("Counting = %v, want %v", counts, want)
+	}
+}
+
+func TestCollector_Then_FinishesEachGroup(t *testing.T) {
+	got := SeqOf("a1", "b2", "a3").GroupByWith(
+		func(s string) byte { return s[0] },
+		Counting[string]().Then(strconv.Itoa))
+	if want := map[byte]string{'a': "2", 'b': "1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Counting().Then(Itoa) = %v, want %v", got, want)
+	}
+}
+
+func TestCollector_Then_Chains(t *testing.T) {
+	got := SeqOf(1, 2, 3).GroupByWith(
+		func(int) string { return "all" },
+		Counting[int]().Then(func(n int) int { return n * 10 }).Then(strconv.Itoa))
+	if want := map[string]string{"all": "30"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Then.Then = %v, want %v", got, want)
 	}
 }
 

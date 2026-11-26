@@ -63,7 +63,7 @@ import "github.com/azuiktech/kleisli-go/stream"
 | `Count()` | `func (s Seq[T]) Count() int` | Number of elements, draining the `Seq`. |
 | `Last(fn)` | `func (s Seq[T]) Last(fn func(T) bool) adt.Option[T]` | Last element satisfying `fn`, draining the `Seq`. |
 | `Nth(n)` | `func (s Seq[T]) Nth(n int) adt.Option[T]` | Element at 0-based position `n`, or `None`. |
-| `GroupByWith[K, A](key, c)` | `func (s Seq[T]) GroupByWith[K comparable, A any](key func(T) K, c Collector[T, A]) map[K]A` | Collects each key's elements, in order, into a fresh container from `c.New` via `c.Add`. |
+| `GroupByWith[K, A, R](key, c)` | `func (s Seq[T]) GroupByWith[K comparable, A, R any](key func(T) K, c Collector[T, A, R]) map[K]R` | Collects each key's elements, in order, into a fresh container from `c`, then finishes each into its result. |
 | `GroupBy[K](key)` | `func (s Seq[T]) GroupBy[K comparable](key func(T) K) map[K][]T` | `GroupByWith(key, Appending[T]())`. |
 | `CountBy[K](key)` | `func (s Seq[T]) CountBy[K comparable](key func(T) K) map[K]int` | `GroupByWith(key, Counting[T]())`. |
 | `Partition(fn)` | `func (s Seq[T]) Partition(fn func(T) bool) (matched, unmatched []T)` | Splits elements into `(matches, nonMatches)`. |
@@ -73,8 +73,10 @@ import "github.com/azuiktech/kleisli-go/stream"
 | Function | Signature | Description |
 |---|---|---|
 | `Join[S]` | `func Join[S ~string](s Seq[S], sep string) string` | Concatenates the elements with `sep` between each pair. |
-| `Appending[T]` | `func Appending[T any]() Collector[T, []T]` | `Collector` appending elements to a slice. |
-| `Counting[T]` | `func Counting[T any]() Collector[T, int]` | `Collector` counting elements. |
+| `Appending[T]` | `func Appending[T any]() Collector[T, []T, []T]` | `Collector` appending elements to a slice. |
+| `Counting[T]` | `func Counting[T any]() Collector[T, int, int]` | `Collector` counting elements. |
+| `CollectorOf[T, A]` | `func CollectorOf[T, A any](new func() A, add func(A, T) A) Collector[T, A, A]` | `Collector` from a fresh-container func and an add func; the result is the container. |
+| `Collector.Then[S]` | `func (c Collector[T, A, R]) Then[S any](fn func(R) S) Collector[T, A, S]` | `c` with `fn` applied to its result, e.g. `Counting[T]().Then(strconv.Itoa)`. |
 | `DistinctSeq[T]` | `func DistinctSeq[T comparable](s Seq[T]) Seq[T]` | Deduplicates items lazily with an internal set. |
 | `FlattenSeq[T]` | `func FlattenSeq[T any](s Seq[[]T]) Seq[T]` | Collapses a `Seq[[]T]` into a `Seq[T]`, yielding each inner slice's elements in order. |
 | `ZipSeq[A, B]` | `func ZipSeq[A, B any](sa Seq[A], sb Seq[B]) Seq[adt.Pair[A, B]]` | Pairs two lazy sequences positionally, stopping at the shorter one, using `iter.Pull`. |
